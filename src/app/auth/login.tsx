@@ -1,0 +1,245 @@
+﻿import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import * as StoreReview from 'expo-store-review';
+import { useState } from 'react';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { ThemedText } from '@/components/themed-text';
+import { Spacing } from '@/constants/theme';
+import { log } from '@/utils/logger';
+import { supabase } from '@/utils/supabase';
+
+const LOGIN_COUNT_KEY = 'geniuslabs_login_count';
+
+async function maybeRequestReview() {
+  try {
+    const raw = await AsyncStorage.getItem(LOGIN_COUNT_KEY);
+    const count = parseInt(raw ?? '0', 10) + 1;
+    await AsyncStorage.setItem(LOGIN_COUNT_KEY, String(count));
+    if (count === 3 && await StoreReview.isAvailableAsync()) {
+      await StoreReview.requestReview();
+    }
+  } catch {
+    // non-fatal
+  }
+}
+
+const PRIMARY = '#1565C0';
+const BG = '#F7F9F8';
+
+const DEMO_ACCOUNTS = [
+  { role: 'Learner',  email: 'chrismalekamk@gmail.com', password: 'Passwordmk1$', color: '#059669' },
+  { role: 'Tutor',    email: 'kganyamilton@icloud.com', password: 'Passwordmk1$', color: '#1565C0' },
+  { role: 'Guardian', email: 'kganyamilton@gmail.com',  password: 'Passwordmk1$', color: '#7C3AED' },
+  { role: 'Admin',    email: 'kganya@gmail.com',  password: 'Passwordmk1$', color: '#DC2626' },
+];
+
+export default function LoginScreen() {
+  const insets = useSafeAreaInsets();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  async function quickLogin(email: string, password: string) {
+    setLoading(true);
+    await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+  }
+
+  async function handleLogin() {
+    if (!email.trim()) return Alert.alert('Required', 'Please enter your email.');
+    if (!password) return Alert.alert('Required', 'Please enter your password.');
+
+    const trimmedEmail = email.trim().toLowerCase();
+    log.info('Login', 'Attempting sign in…', { email: trimmedEmail });
+
+    setLoading(true);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: trimmedEmail,
+      password,
+    });
+    setLoading(false);
+
+    if (error) {
+      log.error('Login', 'Sign in failed', error);
+      Alert.alert('Login Failed', error.message);
+    } else {
+      log.ok('Login', 'Sign in successful', { userId: data.user?.id, email: data.user?.email });
+      maybeRequestReview();
+    }
+  }
+
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: BG }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        contentContainerStyle={[styles.container, { paddingTop: insets.top + Spacing.five }]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}>
+
+        {/* LOGO / BRAND */}
+        <View style={styles.brand}>
+          {/* <View style={styles.logoCircle}>
+            <Ionicons name="school" size={32} color="#fff" />
+          </View> */}
+          <ThemedText style={styles.brandName}>Genius Lab</ThemedText>
+          <ThemedText style={styles.brandSub}>Sign in to your account</ThemedText>
+        </View>
+
+        {/* CARD */}
+        <View style={styles.card}>
+          <View style={styles.fieldGroup}>
+            <ThemedText style={styles.label}>Email address</ThemedText>
+            <View style={styles.inputWrap}>
+              <Ionicons name="mail-outline" size={18} color="#9CA3AF" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="your@email.com"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <ThemedText style={styles.label}>Password</ThemedText>
+            <View style={styles.inputWrap}>
+              <Ionicons name="lock-closed-outline" size={18} color="#9CA3AF" style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                placeholder="••••••••"
+                placeholderTextColor="#9CA3AF"
+              />
+              <Pressable onPress={() => setShowPassword((v) => !v)} style={styles.eyeBtn}>
+                <Ionicons
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={18}
+                  color="#9CA3AF"
+                />
+              </Pressable>
+            </View>
+          </View>
+
+          <Pressable
+            style={[styles.submitBtn, loading && { opacity: 0.6 }]}
+            onPress={handleLogin}
+            disabled={loading}>
+            <ThemedText style={styles.submitBtnText}>
+              {loading ? 'Signing in…' : 'Sign In'}
+            </ThemedText>
+          </Pressable>
+        </View>
+
+        {/* DEV QUICK LOGIN — only in development builds */}
+        {/* {__DEV__ && ( */}
+          <View style={styles.demoPanel}>
+            <View style={styles.demoDivider}>
+              <View style={styles.demoDividerLine} />
+              <ThemedText style={styles.demoDividerText}>DEV · Demo Quick Login</ThemedText>
+              <View style={styles.demoDividerLine} />
+            </View>
+            <View style={styles.demoRow}>
+              {DEMO_ACCOUNTS.map(a => (
+                <Pressable
+                  key={a.role}
+                  style={[styles.demoBtn, { borderColor: a.color }]}
+                  onPress={() => quickLogin(a.email, a.password)}>
+                  <ThemedText style={[styles.demoBtnText, { color: a.color }]}>{a.role}</ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        {/* )} */}
+
+        {/* FOOTER */}
+        <View style={styles.footer}>
+          <ThemedText style={styles.footerText}>Don't have an account?</ThemedText>
+          <Pressable onPress={() => router.push('/auth/signup')}>
+            <ThemedText style={styles.footerLink}>Register here</ThemedText>
+          </Pressable>
+        </View>
+
+        <Pressable style={styles.forgotWrap} onPress={() => router.push('/auth/forgot-password')}>
+          <ThemedText style={styles.forgotLink}>Forgot your password?</ThemedText>
+        </Pressable>
+
+        <ThemedText style={[styles.footerText, { textAlign: 'center', marginTop: Spacing.two }]}>
+          Genius Lab
+        </ThemedText>
+
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flexGrow: 1, paddingHorizontal: Spacing.four, paddingBottom: Spacing.six, gap: Spacing.four },
+
+  brand: { alignItems: 'center', gap: Spacing.two, paddingVertical: Spacing.three },
+  logoCircle: {
+    width: 72, height: 72, borderRadius: 8,
+    backgroundColor: PRIMARY, alignItems: 'center', justifyContent: 'center',
+  },
+  brandName: { fontSize: 26, fontWeight: '800', color: '#111827' },
+  brandSub: { fontSize: 14, color: '#6B7280' },
+
+  card: {
+    backgroundColor: '#fff', borderRadius: 8, padding: Spacing.four, gap: Spacing.three,
+    elevation: 2, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 3 },
+  },
+
+  fieldGroup: { gap: 6 },
+  label: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  inputWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8,
+    backgroundColor: '#F9FAFB', paddingHorizontal: Spacing.three,
+  },
+  inputIcon: { marginRight: 8 },
+  input: { flex: 1, fontSize: 15, color: '#111827', paddingVertical: Spacing.two + 2 },
+  eyeBtn: { padding: 6 },
+
+  submitBtn: {
+    backgroundColor: PRIMARY, paddingVertical: Spacing.three,
+    borderRadius: 8, alignItems: 'center', marginTop: Spacing.one,
+  },
+  submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+  footer: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: Spacing.one },
+  footerText: { fontSize: 13, color: '#6B7280' },
+  footerLink: { fontSize: 13, fontWeight: '700', color: PRIMARY },
+
+  demoPanel: { gap: Spacing.two },
+  demoDivider: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  demoDividerLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
+  demoDividerText: { fontSize: 11, fontWeight: '700', color: '#9CA3AF', letterSpacing: 0.5 },
+  demoRow: { flexDirection: 'row', gap: Spacing.two, justifyContent: 'center' },
+  demoBtn: {
+    flex: 1, borderWidth: 1.5, borderRadius: 8,
+    paddingVertical: 10, alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  demoBtnText: { fontSize: 13, fontWeight: '700' },
+  forgotWrap: { alignItems: 'center' },
+  forgotLink: { fontSize: 13, fontWeight: '600', color: '#6B7280', textDecorationLine: 'underline' },
+});

@@ -8,7 +8,17 @@
     "scheme": "geniuslabs",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "supportsTablet": true,
+      "bundleIdentifier": "com.emkaey.geniuslabs",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Genius Lab needs camera access for live classes and profile photos.",
+        "NSMicrophoneUsageDescription": "Genius Lab needs microphone access for live classes.",
+        "NSPhotoLibraryUsageDescription": "Genius Lab needs photo library access to upload documents and profile photos.",
+        "NSPhotoLibraryAddUsageDescription": "Genius Lab needs to save images to your photo library.",
+        "NSCalendarsUsageDescription": "Genius Lab needs calendar access to add class reminders.",
+        "UIBackgroundModes": ["remote-notification"]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +27,20 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.emkaey.geniuslabs",
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "com.google.android.c2dm.permission.RECEIVE"
+      ],
     },
     "web": {
       "output": "static",
@@ -34,11 +57,35 @@
             "imageWidth": 76
           }
         }
+      ],
+      "expo-secure-store",
+      ["expo-document-picker", { "iCloudContainerEnvironment": "Production" }],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#1565C0",
+          "sounds": [],
+          "mode": "production"
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9c99f807-c709-4705-b18d-7570d632853d"
+      }
+    },
+    "owner": "emkaey",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/9c99f807-c709-4705-b18d-7570d632853d"
     }
   }
 }

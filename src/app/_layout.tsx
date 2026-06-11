@@ -1,15 +1,96 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { ONBOARDING_KEY } from './onboarding';
 
-export default function TabLayout() {
+import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { ErrorBoundary } from '@/components/error-boundary';
+import { AuthProvider, useAuth } from '@/context/auth-context';
+import { ClassesProvider } from '@/context/classes-context';
+import { NotificationProvider } from '@/context/notification-context';
+
+function RootNavigator() {
+  const { session, loading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
   const colorScheme = useColorScheme();
+
+  // Read onboarding flag ONCE on mount — never re-read on navigation
+  const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
+  useEffect(() => {
+    AsyncStorage.getItem(ONBOARDING_KEY).then(val => setOnboardingDone(val === 'true'));
+  }, []);
+
+  useEffect(() => {
+    // Wait until auth AND onboarding storage are both resolved
+    if (loading || onboardingDone === null) return;
+
+    const seg0 = segments[0] as string | undefined;
+
+    // Onboarding disabled
+    // if (!onboardingDone) {
+    //   if (seg0 !== 'onboarding') router.replace('/onboarding');
+    //   return;
+    // }
+
+    // Auth guard — runs on every segments/session change once onboarding is done
+    const inAuth = seg0 === 'auth';
+    if (!session && !inAuth) {
+      router.replace('/auth/login');
+    } else if (session && inAuth) {
+      router.replace('/(tabs)');
+    }
+  }, [session, loading, onboardingDone, segments]);
+
+  // Render nothing until auth resolves (prevents the flash of wrong screen)
+  if (loading || onboardingDone === null) return null;
+
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
+      <ClassesProvider>
+      <NotificationProvider>
+        <StatusBar style="dark" />
+        <AnimatedSplashOverlay />
+        <Stack>
+          <Stack.Screen name="onboarding"            options={{ headerShown: false }} />
+          <Stack.Screen name="auth/login"            options={{ headerShown: false }} />
+          <Stack.Screen name="auth/signup"           options={{ headerShown: false }} />
+          <Stack.Screen name="auth/forgot-password"  options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)"                options={{ headerShown: false }} />
+          <Stack.Screen name="chat-room"             options={{ headerShown: false }} />
+          <Stack.Screen name="notifications"         options={{ headerShown: false }} />
+          <Stack.Screen name="payment-webview"       options={{ headerShown: false, presentation: 'modal' }} />
+          <Stack.Screen name="admin/application-detail" options={{ headerShown: false, presentation: 'modal' }} />
+          <Stack.Screen name="admin/learners"        options={{ headerShown: false }} />
+          <Stack.Screen name="admin/materials"       options={{ headerShown: false }} />
+          <Stack.Screen name="admin/classes"         options={{ headerShown: false }} />
+          <Stack.Screen name="admin/gallery"         options={{ headerShown: false }} />
+          <Stack.Screen name="admin/announcements"   options={{ headerShown: false }} />
+          <Stack.Screen name="enroll"                options={{ title: 'Learner Enrolment', headerBackTitle: 'Back' }} />
+          <Stack.Screen name="live-class/[room]"     options={{ title: 'Online Classroom', headerBackTitle: 'Classes' }} />
+          <Stack.Screen name="create-announcement"   options={{ title: 'New Announcement', presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="create-class"          options={{ title: 'Create Class', presentation: 'modal', headerBackTitle: 'Cancel' }} />
+          <Stack.Screen name="create-material"       options={{ title: 'Add Material', presentation: 'modal', headerBackTitle: 'Cancel' }} />
+          <Stack.Screen name="create-quiz"           options={{ title: 'Add Quiz', presentation: 'modal', headerBackTitle: 'Cancel' }} />
+          <Stack.Screen name="quiz/[id]"             options={{ title: 'Quiz', headerBackTitle: 'Tasks' }} />
+          <Stack.Screen name="quiz-questions/[id]"   options={{ title: 'Manage Questions', presentation: 'modal', headerBackTitle: 'Cancel' }} />
+        </Stack>
+      </NotificationProvider>
+      </ClassesProvider>
     </ThemeProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <ErrorBoundary>
+      <AuthProvider>
+        <RootNavigator />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
