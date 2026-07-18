@@ -7,7 +7,6 @@ import { useState } from 'react';
 import { supabase } from '@/utils/supabase';
 import { log } from '@/utils/logger';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -22,6 +21,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { LoadingRow } from '@/components/loading-dots';
 import { Spacing } from '@/constants/theme';
 import { ALL_GRADES, subjectsForGrade } from '@/constants/curriculum';
 import { useAuth } from '@/context/auth-context';
@@ -323,7 +323,7 @@ export default function EnrollScreen() {
         </LinearGradient>
         <ThemedText style={s.successTitle}>Application Submitted!</ThemedText>
         <ThemedText style={s.successSub}>
-          We'll contact you at {profile?.phone ?? user?.email} within 24 hours to confirm classes and fees.
+          We&apos;ll contact you at {profile?.phone ?? user?.email} within 24 hours to confirm classes and fees.
         </ThemedText>
         <View style={s.successCard}>
           {[
@@ -499,12 +499,14 @@ export default function EnrollScreen() {
         {/* ── Submit ── */}
         <Pressable style={[s.submitBtn, submitting && { opacity: 0.6 }]} onPress={handleSubmit} disabled={submitting}>
           <LinearGradient colors={[PRIMARY, PRIMARY_D]} style={s.submitInner}>
-            {submitting
-              ? <ActivityIndicator size="small" color="#fff" />
-              : <Ionicons name="send" size={18} color="#fff" />}
-            <ThemedText style={s.submitText}>
-              {submitting ? 'Submitting…' : 'Submit Application'}
-            </ThemedText>
+            {submitting ? (
+              <LoadingRow label="Submitting…" color="#fff" textColor="#fff" />
+            ) : (
+              <>
+                <Ionicons name="send" size={18} color="#fff" />
+                <ThemedText style={s.submitText}>Submit Application</ThemedText>
+              </>
+            )}
           </LinearGradient>
         </Pressable>
 

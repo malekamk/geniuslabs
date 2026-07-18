@@ -16,9 +16,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { GoogleIcon } from '@/components/google-icon';
+import { LoadingDots } from '@/components/loading-dots';
 import { Spacing } from '@/constants/theme';
 import { log } from '@/utils/logger';
 import { supabase } from '@/utils/supabase';
+import { signInWithProvider } from '@/utils/oauth';
 
 const LOGIN_COUNT_KEY = 'geniuslabs_login_count';
 
@@ -51,6 +54,21 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null);
+
+  async function handleOAuth(provider: 'google' | 'apple') {
+    setOauthLoading(provider);
+    try {
+      const session = await signInWithProvider(provider);
+      if (session) maybeRequestReview();
+      // navigation handled by _layout.tsx once the session/profile resolve
+    } catch (e: any) {
+      log.error('Login', `${provider} sign-in failed`, e);
+      Alert.alert('Sign-in Failed', e?.message ?? 'Please try again.');
+    } finally {
+      setOauthLoading(null);
+    }
+  }
 
   async function quickLogin(email: string, password: string) {
     setLoading(true);
@@ -95,7 +113,7 @@ export default function LoginScreen() {
           {/* <View style={styles.logoCircle}>
             <Ionicons name="school" size={32} color="#fff" />
           </View> */}
-          <ThemedText style={styles.brandName}>Genius Lab</ThemedText>
+          <ThemedText style={styles.brandName}>Rhavuyani Genius Lab</ThemedText>
           <ThemedText style={styles.brandSub}>Sign in to your account</ThemedText>
         </View>
 
@@ -144,14 +162,54 @@ export default function LoginScreen() {
             style={[styles.submitBtn, loading && { opacity: 0.6 }]}
             onPress={handleLogin}
             disabled={loading}>
-            <ThemedText style={styles.submitBtnText}>
-              {loading ? 'Signing in…' : 'Sign In'}
-            </ThemedText>
+            {loading ? (
+              <LoadingDots color="#fff" />
+            ) : (
+              <ThemedText style={styles.submitBtnText}>Sign In</ThemedText>
+            )}
           </Pressable>
+
+          <View style={styles.orDivider}>
+            <View style={styles.demoDividerLine} />
+            <ThemedText style={styles.orDividerText}>or continue with</ThemedText>
+            <View style={styles.demoDividerLine} />
+          </View>
+
+          <View style={{ gap: Spacing.three }}>
+            <Pressable
+              style={[styles.oauthBtn, oauthLoading === 'google' && { opacity: 0.6 }]}
+              disabled={!!oauthLoading}
+              onPress={() => handleOAuth('google')}>
+              {oauthLoading === 'google' ? (
+                <LoadingDots />
+              ) : (
+                <>
+                  <GoogleIcon size={18} />
+                  <ThemedText style={styles.oauthBtnText}>Continue with Google</ThemedText>
+                </>
+              )}
+            </Pressable>
+
+            {Platform.OS === 'ios' && (
+              <Pressable
+                style={[styles.oauthBtn, styles.appleBtn, oauthLoading === 'apple' && { opacity: 0.6 }]}
+                disabled={!!oauthLoading}
+                onPress={() => handleOAuth('apple')}>
+                {oauthLoading === 'apple' ? (
+                  <LoadingDots color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="logo-apple" size={20} color="#fff" />
+                    <ThemedText style={[styles.oauthBtnText, { color: '#fff' }]}>Continue with Apple</ThemedText>
+                  </>
+                )}
+              </Pressable>
+            )}
+          </View>
         </View>
 
-        {/* DEV QUICK LOGIN — only in development builds */}
-        {/* {__DEV__ && ( */}
+        {/* DEV QUICK LOGIN — dev builds only; never ships with real credentials in production */}
+        {/* {__DEV__ && (
           <View style={styles.demoPanel}>
             <View style={styles.demoDivider}>
               <View style={styles.demoDividerLine} />
@@ -169,11 +227,11 @@ export default function LoginScreen() {
               ))}
             </View>
           </View>
-        {/* )} */}
+        )} */}
 
         {/* FOOTER */}
         <View style={styles.footer}>
-          <ThemedText style={styles.footerText}>Don't have an account?</ThemedText>
+          <ThemedText style={styles.footerText}>Don&apos;t have an account?</ThemedText>
           <Pressable onPress={() => router.push('/auth/signup')}>
             <ThemedText style={styles.footerLink}>Register here</ThemedText>
           </Pressable>
@@ -183,9 +241,10 @@ export default function LoginScreen() {
           <ThemedText style={styles.forgotLink}>Forgot your password?</ThemedText>
         </Pressable>
 
-        <ThemedText style={[styles.footerText, { textAlign: 'center', marginTop: Spacing.two }]}>
-          Genius Lab
-        </ThemedText>
+        {/* <ThemedText style={[styles.footerText, { textAlign: 'center', marginTop: Spacing.two }]}>
+          Rhavuyani Genius Lab
+        </ThemedText> */}
+        
 
       </ScrollView>
     </KeyboardAvoidingView>
@@ -224,6 +283,17 @@ const styles = StyleSheet.create({
     borderRadius: 8, alignItems: 'center', marginTop: Spacing.one,
   },
   submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+  orDivider: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginTop: Spacing.three },
+  orDividerText: { fontSize: 12, fontWeight: '600', color: '#9CA3AF' },
+
+  oauthBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8,
+    paddingVertical: Spacing.three, backgroundColor: '#fff',
+  },
+  oauthBtnText: { fontSize: 15, fontWeight: '600', color: '#111827' },
+  appleBtn: { backgroundColor: '#000', borderColor: '#000' },
 
   footer: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: Spacing.one },
   footerText: { fontSize: 13, color: '#6B7280' },

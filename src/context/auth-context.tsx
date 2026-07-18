@@ -15,6 +15,7 @@ type AuthContextType = {
   isImpersonating: boolean;
   loginAs: (p: Profile) => void;
   exitLoginAs: () => void;
+  refreshProfile: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -61,20 +62,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function fetchProfile(userId: string) {
     log.info(TAG, 'Fetching profile…', { userId });
+    // maybeSingle (not single) — a brand-new OAuth user has no row yet, which
+    // is an expected case, not an error worth logging in red.
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
 
     if (error) {
       log.error(TAG, 'Profile fetch failed', error);
-    } else {
+    } else if (data) {
       log.ok(TAG, 'Profile loaded', { role: (data as Profile).role, name: (data as Profile).full_name });
+    } else {
+      log.info(TAG, 'No profile row yet — new user needs to complete profile');
     }
 
     setRealProfile(data as Profile | null);
     setLoading(false);
+  }
+
+  async function refreshProfile() {
+    if (session?.user) await fetchProfile(session.user.id);
   }
 
   async function signOut() {
@@ -85,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, profile, loading, signOut, isImpersonating, loginAs, exitLoginAs }}>
+    <AuthContext.Provider value={{ session, user: session?.user ?? null, profile, loading, signOut, isImpersonating, loginAs, exitLoginAs, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

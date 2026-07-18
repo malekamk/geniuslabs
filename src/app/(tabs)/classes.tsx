@@ -17,6 +17,9 @@ import type { Learner, EnrolmentApplication } from '@/types/db';
 const PRIMARY = '#1565C0';
 const BLUE = '#1565C0';
 const BG = '#F7F9F8';
+// Postgres rejects '' for a uuid column (22P02) — use this instead of ?? '' so an
+// unresolved id just filters to zero rows rather than throwing.
+const NULL_UUID = '00000000-0000-0000-0000-000000000000';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -72,7 +75,7 @@ export function countdown(iso: string | null): string {
   return remHrs > 0 ? `${days}d ${remHrs}h left` : `${days}d left`;
 }
 
-function ClassCard({ item, learnerId, onDelete }: { item: ClassItem; learnerId?: string; onDelete?: () => void }) {
+function ClassCard({ item, learnerIds, onDelete }: { item: ClassItem; learnerIds: string[]; onDelete?: () => void }) {
   const iconName = SUBJECT_ICONS[item.subject] ?? 'school-outline';
   const isPast = item.isPast;
   const accentColor = isPast ? '#9CA3AF' : item.live ? PRIMARY : BLUE;
@@ -90,9 +93,9 @@ function ClassCard({ item, learnerId, onDelete }: { item: ClassItem; learnerId?:
   const timeLeft = !isPast && !item.live ? countdown(item.scheduled_at) : '';
 
   async function handleJoin() {
-    if (learnerId) {
+    if (learnerIds.length > 0) {
       await supabase.from('class_enrolments').upsert(
-        { class_id: item.id, learner_id: learnerId, joined_at: new Date().toISOString() },
+        learnerIds.map(learner_id => ({ class_id: item.id, learner_id, joined_at: new Date().toISOString() })),
         { onConflict: 'class_id,learner_id' }
       );
     }
@@ -212,12 +215,17 @@ export default function ClassesScreen() {
   const learnerGrade = isLearner ? (profile?.grades?.[0] ?? null) : null;
 
   const { data: guardianLearners } = useSupabaseQuery<Learner>('learners', {
-    filter: q => q.eq('guardian_id', user?.id ?? ''),
+    filter: q => q.eq('guardian_id', user?.id ?? NULL_UUID),
   });
-  const { data: myApps } = useSupabaseQuery<EnrolmentApplication>('enrolment_applications', {
+  const { data: ownLearnerRow } = useSupabaseQuery<Learner>('learners', {
+    filter: q => q.eq('profile_id', isLearner ? (user?.id ?? NULL_UUID) : NULL_UUID),
+  });
+  const { data: myApps, refetch: refetchMyApps } = useSupabaseQuery<EnrolmentApplication>('enrolment_applications', {
     select: 'subjects',
-    filter: q => q.eq('learner_name', isLearner ? (profile?.full_name ?? '') : ''),
+    filter: q => q.eq('learner_id', isLearner ? (ownLearnerRow[0]?.id ?? NULL_UUID) : NULL_UUID),
   });
+  // useSupabaseQuery captures its filter once on mount — refetch once the learner id is known.
+  useEffect(() => { if (ownLearnerRow[0]?.id) refetchMyApps(); }, [ownLearnerRow[0]?.id]);
   const enrolledSubjects: string[] = myApps[0]?.subjects ?? [];
 
   const learnerGrades = [...new Set(guardianLearners.map(l => l.grade))];
@@ -235,6 +243,12 @@ export default function ClassesScreen() {
   const liveClasses      = gradeFiltered.filter(c => c.live);
   const upcomingClasses  = gradeFiltered.filter(c => !c.live && !c.isPast);
   const pastClasses      = gradeFiltered.filter(c => c.isPast);
+
+  function learnerIdsForClass(c: ClassItem): string[] {
+    if (isLearner) return ownLearnerRow[0] ? [ownLearnerRow[0].id] : [];
+    if (isGuardian) return guardianLearners.filter(l => l.grade === c.grade).map(l => l.id);
+    return [];
+  }
 
   const canManage = (p: typeof profile) => p?.role === 'tutor' || p?.role === 'admin';
   const deleteHandler = (c: ClassItem) => () =>
@@ -354,7 +368,7 @@ export default function ClassesScreen() {
               <>
                 <SectionLabel title="Live Now" count={liveClasses.length} />
                 <View style={styles.list}>
-                  {liveClasses.map(c => <ClassCard key={c.id} item={c} learnerId={undefined}
+                  {liveClasses.map(c => <ClassCard key={c.id} item={c} learnerIds={learnerIdsForClass(c)}
                     onDelete={canManage(profile) ? deleteHandler(c) : undefined} />)}
                 </View>
               </>
@@ -363,7 +377,7 @@ export default function ClassesScreen() {
               <>
                 <SectionLabel title="Upcoming" count={upcomingClasses.length} />
                 <View style={styles.list}>
-                  {upcomingClasses.map(c => <ClassCard key={c.id} item={c} learnerId={undefined}
+                  {upcomingClasses.map(c => <ClassCard key={c.id} item={c} learnerIds={learnerIdsForClass(c)}
                     onDelete={canManage(profile) ? deleteHandler(c) : undefined} />)}
                 </View>
               </>
@@ -372,7 +386,7 @@ export default function ClassesScreen() {
               <>
                 <SectionLabel title="History" count={pastClasses.length} />
                 <View style={styles.list}>
-                  {pastClasses.map(c => <ClassCard key={c.id} item={c} learnerId={undefined}
+                  {pastClasses.map(c => <ClassCard key={c.id} item={c} learnerIds={learnerIdsForClass(c)}
                     onDelete={canManage(profile) ? deleteHandler(c) : undefined} />)}
                 </View>
               </>

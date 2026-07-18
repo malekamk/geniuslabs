@@ -1,0 +1,17 @@
+[functions.payment-webhook]
+# Yoco calls this directly — it will never carry a Supabase user JWT.
+# Authenticity is instead verified inside the function via the
+# webhook-signature header (see payment-webhook/index.ts).
+verify_jwt = false
+
+# pg_cron calls this directly (via net.http_post) — it will never carry a
+# Supabase user JWT. Authenticity is instead verified via the x-cron-secret
+# header (see payment-reminders/index.ts).
+[functions.payment-reminders]
+verify_jwt = false
+
+# pg_cron calls this directly (via net.http_post) — it will never carry a
+# Supabase user JWT. Authenticity is instead verified via the x-cron-secret
+# header (see weekly-digest/index.ts).
+[functions.weekly-digest]
+verify_jwt = false

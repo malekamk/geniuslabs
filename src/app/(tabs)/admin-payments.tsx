@@ -1,11 +1,12 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
+import { LoadingDots } from '@/components/loading-dots';
 import { supabase } from '@/utils/supabase';
 import { sendNotifications } from '@/utils/notify';
 import { BottomTabInset, Spacing } from '@/constants/theme';
@@ -109,7 +110,7 @@ export default function AdminPayments() {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={PRIMARY} />
+        <LoadingDots style={{ marginTop: 40 }} />
       ) : payments.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="card-outline" size={40} color="#D1D5DB" />

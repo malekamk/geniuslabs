@@ -3,13 +3,14 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator, Alert, FlatList, Linking, Modal,
+  Alert, FlatList, Linking, Modal,
   Pressable, ScrollView, StyleSheet, Switch, TextInput, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
+import { LoadingDots } from '@/components/loading-dots';
 import { supabase } from '@/utils/supabase';
 import { Spacing } from '@/constants/theme';
 import type { Learner, EnrolmentApplication } from '@/types/db';
@@ -45,13 +46,23 @@ export default function AdminLearners() {
   async function openDetail(l: Learner) {
     setSelected(l);
     setLoadingApp(true);
-    const { data } = await supabase
+    let { data } = await supabase
       .from('enrolment_applications')
       .select('*')
-      .eq('learner_name', l.full_name)
+      .eq('learner_id', l.id)
       .order('submitted_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
+    if (!data) {
+      const byName = await supabase
+        .from('enrolment_applications')
+        .select('*')
+        .eq('learner_name', l.full_name)
+        .order('submitted_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      data = byName.data;
+    }
     setSelApp(data as EnrolmentApplication | null);
     setLoadingApp(false);
   }
@@ -117,7 +128,7 @@ export default function AdminLearners() {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={PRIMARY} />
+        <LoadingDots style={{ marginTop: 40, alignSelf: 'center' }} />
       ) : (
         <FlatList
           data={filtered}
@@ -193,7 +204,7 @@ export default function AdminLearners() {
               {/* Application */}
               <ThemedText style={s.sec}>ENROLMENT APPLICATION</ThemedText>
               {loadingApp ? (
-                <ActivityIndicator color={PRIMARY} style={{ marginVertical: 12 }} />
+                <LoadingDots style={{ marginVertical: 12, alignSelf: 'center' }} />
               ) : selApp ? (
                 <View style={s.infoCard}>
                   <View style={s.infoRow}>

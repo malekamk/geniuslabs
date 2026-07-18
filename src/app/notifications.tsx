@@ -1,11 +1,12 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import { ThemedText } from '@/components/themed-text';
+import { LoadingDots } from '@/components/loading-dots';
 import { useAuth } from '@/context/auth-context';
 import { useNotifications } from '@/context/notification-context';
 import { supabase } from '@/utils/supabase';
@@ -113,7 +114,7 @@ export default function NotificationsScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={PRIMARY} />
+        <LoadingDots style={{ marginTop: 40, alignSelf: 'center' }} />
       ) : (
         <FlatList
           data={notifications}

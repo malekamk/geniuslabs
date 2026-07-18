@@ -6,9 +6,10 @@ import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { supabase } from '@/utils/supabase';
+import { LoadingDots } from '@/components/loading-dots';
 
 /**
- * Hides footer/nav chrome inside the Yoco checkout page and prevents
+ * Hides footer/nav chrome inside the checkout page and prevents
  * overscroll bounce. Re-applied after DOM mutations and at intervals.
  */
 const CHECKOUT_SCRIPT = `
@@ -44,67 +45,69 @@ const CHECKOUT_SCRIPT = `
 })();
 `;
 
-function parseReturnStatus(url: string): 'success' | 'cancelled' | null {
-  if (!url.includes('/demo/yoco')) return null;
+const RETURN_SCHEME = 'geniuslabs://payment-return';
+
+function parseReturnStatus(url: string): 'success' | 'cancel' | 'failure' | null {
+  if (!url.startsWith(RETURN_SCHEME)) return null;
   try {
-    const u = new URL(url);
-    const s = u.searchParams.get('status');
-    if (s === 'success') return 'success';
-    if (s === 'cancel' || s === 'failure') return 'cancelled';
-  } catch {
-    if (url.includes('status=success')) return 'success';
-    if (url.includes('status=cancel') || url.includes('status=failure')) return 'cancelled';
-  }
+    const status = new URL(url).searchParams.get('status');
+    if (status === 'success' || status === 'cancel' || status === 'failure') return status;
+  } catch {}
   return null;
 }
 
 export default function PaymentWebViewScreen() {
-  const { url, title, amount, feeType, learnerId, guardianId, applicationId } =
-    useLocalSearchParams<{
-      url: string; title: string; amount: string;
-      feeType: string; learnerId: string; guardianId: string; applicationId: string;
-    }>();
+  const { url, title, paymentId } = useLocalSearchParams<{ url: string; title: string; paymentId: string }>();
   const insets = useSafeAreaInsets();
   const webRef = useRef<WebView>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const completedRef = useRef(false);
+  const [verifying, setVerifying] = useState(false);
+  const handledRef = useRef(false);
 
   const headerTopPad = Platform.OS === 'android' ? Math.max(insets.top, 8) : 10;
 
-  async function onPaymentSuccess() {
-    if (completedRef.current) return;
-    completedRef.current = true;
+  // Never trust the redirect itself — it only tells us to go ask Yoco what
+  // really happened. verify-payment does that lookup server-side and is the
+  // only thing that ever marks a payment paid.
+  async function handleReturn(status: 'success' | 'cancel' | 'failure') {
+    if (handledRef.current) return;
+    handledRef.current = true;
 
-    await supabase.from('payments').insert({
-      learner_id:     learnerId || null,
-      guardian_id:    guardianId,
-      amount:         Number(amount ?? 0),
-      currency:       'ZAR',
-      type:           (feeType as any) ?? 'tuition',
-      status:         'paid',
-      payment_method: 'card',
-      paid_at:        new Date().toISOString(),
-      description:    title,
-    });
-
-    if (applicationId) {
-      await supabase.from('enrolment_applications')
-        .update({ status: 'approved', reviewed_at: new Date().toISOString() })
-        .eq('id', applicationId);
+    if (status !== 'success') {
+      Alert.alert(
+        status === 'cancel' ? 'Payment Cancelled' : 'Payment Failed',
+        'No charge was made.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+      return;
     }
 
-    Alert.alert('Payment Successful 🎉', 'Your payment is confirmed and enrolment approved!', [
-      { text: 'Done', onPress: () => router.back() },
-    ]);
-  }
+    if (!paymentId) {
+      Alert.alert('Payment Submitted', 'Check your Payments list for the updated status.', [
+        { text: 'Done', onPress: () => router.back() },
+      ]);
+      return;
+    }
 
-  function handleNavChange(nav: { url: string }) {
-    const status = parseReturnStatus(nav.url);
-    if (status === 'success') void onPaymentSuccess();
-    else if (status === 'cancelled') {
-      Alert.alert('Payment Cancelled', 'No charge was made.', [
+    setVerifying(true);
+    const { data, error } = await supabase.functions.invoke('verify-payment', { body: { paymentId } });
+    setVerifying(false);
+
+    if (!error && data?.status === 'paid') {
+      Alert.alert('Payment Successful', 'Your payment has been confirmed.', [
+        { text: 'Done', onPress: () => router.back() },
+      ]);
+    } else if (!error && data?.status === 'failed') {
+      Alert.alert('Payment Failed', 'Yoco reported this payment did not succeed.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
+    } else {
+      // Still pending on Yoco's side, or verification couldn't complete — don't claim success.
+      Alert.alert(
+        'Still Confirming',
+        "We couldn't confirm this payment yet. Check your Payments list shortly — it'll update once confirmed.",
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
     }
   }
 
@@ -135,8 +138,23 @@ export default function PaymentWebViewScreen() {
           setIsLoading(false);
           webRef.current?.injectJavaScript(CHECKOUT_SCRIPT);
         }}
-        onNavigationStateChange={handleNavChange}
+        // Intercept the custom-scheme redirect before the OS tries (and fails) to load it.
+        onShouldStartLoadWithRequest={(nav) => {
+          const status = parseReturnStatus(nav.url);
+          if (status) {
+            handleReturn(status);
+            return false;
+          }
+          return true;
+        }}
       />
+
+      {verifying && (
+        <View style={styles.verifyOverlay} pointerEvents="auto">
+          <LoadingDots size={10} color="#fff" />
+          <Text style={styles.verifyText}>Confirming payment…</Text>
+        </View>
+      )}
 
       {/* Absolute header overlay — black, always on top */}
       <View
@@ -168,12 +186,22 @@ const styles = StyleSheet.create({
 
   webView: { flex: 1, backgroundColor: '#000' },
 
+  verifyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  verifyText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+
   headerOverlay: {
     position: 'absolute',
     top: 0, left: 0, right: 0,
     zIndex: 10,
     backgroundColor: '#000',
-    borderBottomWidth: 1,
+    borderBottomWidth: 0,
     borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   headerRow: {
@@ -188,6 +216,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
   headerCenter: { flex: 1, alignItems: 'center', gap: 2 },
-  headerTitle: { fontSize: 15, fontWeight: '700', color: '#fff' },
-  headerSub:   { fontSize: 11, color: 'rgba(255,255,255,0.6)' },
+  headerTitle: { fontSize: 19, fontWeight: '700', color: '#fff' },
+  headerSub:   { fontSize: 13, color: 'rgba(255,255,255,0.6)' },
 });

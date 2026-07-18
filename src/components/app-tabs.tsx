@@ -10,8 +10,12 @@ import { useClasses } from '@/context/classes-context';
 const PRIMARY = '#1565C0';
 
 type P = { color: string; focused: boolean };
-const ico = (outline: string, filled: string) =>
-  ({ color, focused }: P) => <Ionicons name={(focused ? filled : outline) as any} color={color} size={24} />;
+const ico = (outline: string, filled: string) => {
+  function TabIcon({ color, focused }: P) {
+    return <Ionicons name={(focused ? filled : outline) as any} color={color} size={24} />;
+  }
+  return TabIcon;
+};
 
 export default function AppTabs() {
   const scheme = useColorScheme();

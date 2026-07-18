@@ -3,10 +3,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { FlatList, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { LoadingRow } from '@/components/loading-dots';
 import { useAuth } from '@/context/auth-context';
 import { useNotifications } from '@/context/notification-context';
 import { supabase } from '@/utils/supabase';
@@ -169,8 +170,7 @@ export default function ChatScreen() {
 
       {loading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator color={PRIMARY} />
-          <ThemedText style={styles.loadingText}>Loading your groups…</ThemedText>
+          <LoadingRow label="Loading your groups…" />
         </View>
       ) : groups.length === 0 ? (
         <View style={styles.empty}>

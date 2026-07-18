@@ -1,8 +1,9 @@
 import * as ExpoNotifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Linking, Platform } from 'react-native';
 
 import { supabase } from '@/utils/supabase';
 import { useAuth } from '@/context/auth-context';
@@ -16,10 +17,17 @@ ExpoNotifications.setNotificationHandler({
   }),
 });
 
+type PermissionStatus = 'granted' | 'denied' | 'undetermined';
+
+const PERMISSION_STATUS_KEY = 'notif_permission_status';
+const PROMPTED_ONCE_KEY = 'notif_prompted_once';
+
 type NotificationContextType = {
   unreadCount: number;
   chatUnread: number;
   tasksUnread: number;
+  permissionStatus: PermissionStatus;
+  enableNotifications: () => Promise<void>;
   triggerLocal: (title: string, body: string) => Promise<void>;
   markAllRead: () => void;
   markChatRead: () => void;
@@ -30,6 +38,8 @@ const NotificationContext = createContext<NotificationContextType>({
   unreadCount: 0,
   chatUnread: 0,
   tasksUnread: 0,
+  permissionStatus: 'undetermined',
+  enableNotifications: async () => {},
   triggerLocal: async () => {},
   markAllRead: () => {},
   markChatRead: () => {},
@@ -41,11 +51,19 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
   const [tasksUnread, setTasksUnread] = useState(0);
+  const [permissionStatus, setPermissionStatus] = useState<PermissionStatus>('undetermined');
   const permGranted = useRef(false);
   const chatChannels = useRef<ReturnType<typeof supabase.channel>[]>([]);
 
-  useEffect(() => { requestPermission(); }, []);
-  useEffect(() => { if (profile?.id && permGranted.current) registerPushToken(); }, [profile?.id]);
+  useEffect(() => { initPermission(); }, []);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refreshPermission();
+    });
+    return () => sub.remove();
+  }, []);
+  useEffect(() => { if (profile?.id && permissionStatus === 'granted') registerPushToken(); }, [profile?.id, permissionStatus]);
 
   // ── System notifications (DB table) ──────────────────────────────
   useEffect(() => {
@@ -105,9 +123,15 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       const { data: learnerRow } = await supabase
         .from('learners').select('id, grade, full_name').eq('profile_id', profile.id).single();
       if (learnerRow) {
-        const { data: apps } = await supabase
+        let { data: apps } = await supabase
           .from('enrolment_applications').select('subjects')
-          .eq('learner_name', learnerRow.full_name).limit(1);
+          .eq('learner_id', learnerRow.id).limit(1);
+        if (!apps?.length) {
+          const { data } = await supabase
+            .from('enrolment_applications').select('subjects')
+            .ilike('learner_name', learnerRow.full_name.trim()).limit(1);
+          apps = data;
+        }
         const subjectNames: string[] = apps?.[0]?.subjects ?? [];
         if (subjectNames.length) {
           const { data: subjectRows } = await supabase
@@ -178,10 +202,43 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function requestPermission() {
-    if (Platform.OS === 'web') return;
-    const { status } = await ExpoNotifications.requestPermissionsAsync();
+  function applyStatus(status: PermissionStatus) {
+    setPermissionStatus(status);
     permGranted.current = status === 'granted';
+    AsyncStorage.setItem(PERMISSION_STATUS_KEY, status);
+  }
+
+  async function initPermission() {
+    if (Platform.OS === 'web') return;
+    const cached = await AsyncStorage.getItem(PERMISSION_STATUS_KEY) as PermissionStatus | null;
+    if (cached) applyStatus(cached);
+
+    const { status } = await ExpoNotifications.getPermissionsAsync();
+    applyStatus(status as PermissionStatus);
+
+    const prompted = await AsyncStorage.getItem(PROMPTED_ONCE_KEY);
+    if (!prompted && status === 'undetermined') {
+      await AsyncStorage.setItem(PROMPTED_ONCE_KEY, 'true');
+      const { status: newStatus } = await ExpoNotifications.requestPermissionsAsync();
+      applyStatus(newStatus as PermissionStatus);
+    }
+  }
+
+  async function refreshPermission() {
+    if (Platform.OS === 'web') return;
+    const { status } = await ExpoNotifications.getPermissionsAsync();
+    applyStatus(status as PermissionStatus);
+  }
+
+  async function enableNotifications() {
+    if (Platform.OS === 'web') return;
+    if (permissionStatus === 'denied') {
+      Linking.openSettings();
+      return;
+    }
+    await AsyncStorage.setItem(PROMPTED_ONCE_KEY, 'true');
+    const { status } = await ExpoNotifications.requestPermissionsAsync();
+    applyStatus(status as PermissionStatus);
   }
 
   async function registerPushToken() {
@@ -223,7 +280,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   function markTasksRead() { setTasksUnread(0); }
 
   return (
-    <NotificationContext.Provider value={{ unreadCount, chatUnread, tasksUnread, triggerLocal, markAllRead, markChatRead, markTasksRead }}>
+    <NotificationContext.Provider value={{ unreadCount, chatUnread, tasksUnread, permissionStatus, enableNotifications, triggerLocal, markAllRead, markChatRead, markTasksRead }}>
       {children}
     </NotificationContext.Provider>
   );

@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { supabase } from '@/utils/supabase';
 import { sendNotifications } from '@/utils/notify';
+import { log } from '@/utils/logger';
 import { Spacing } from '@/constants/theme';
 import type { EnrolmentApplication } from '@/types/db';
 
@@ -48,13 +49,18 @@ export default function ApplicationDetail() {
         text: verb, style: status === 'rejected' ? 'destructive' : 'default',
         onPress: async () => {
           setSaving(true);
-          await supabase.from('enrolment_applications').update({
+          const { error } = await supabase.from('enrolment_applications').update({
             status,
             admin_notes:  notes.trim() || null,
             reviewed_by:  user?.id,
             reviewed_at:  new Date().toISOString(),
           }).eq('id', app.id);
-          console.log('[app-detail] guardian_profile_id:', app.guardian_profile_id, 'status:', status);
+          if (error) {
+            setSaving(false);
+            log.error('AppDetail', 'Status update failed', error);
+            Alert.alert('Error', 'Could not update the application. Please try again.');
+            return;
+          }
           if (app.guardian_profile_id && (status === 'approved' || status === 'rejected')) {
             await sendNotifications(
               app.guardian_profile_id,
@@ -65,7 +71,7 @@ export default function ApplicationDetail() {
               'general',
             );
           } else {
-            console.warn('[app-detail] skipped notify — guardian_profile_id missing or status not approved/rejected');
+            log.warn('AppDetail', 'Skipped notify — guardian_profile_id missing or status not approved/rejected');
           }
           setSaving(false);
           router.back();

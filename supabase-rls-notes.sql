@@ -115,3 +115,27 @@ CREATE POLICY "Authenticated upload to enrolment-docs"
 CREATE POLICY "Public read enrolment-docs"
   ON storage.objects FOR SELECT
   USING (bucket_id = 'enrolment-docs');
+
+-- ============================================================
+-- Chat read receipts ("Seen by") — run this in the Supabase SQL
+-- editor to enable chat read receipts
+-- ============================================================
+CREATE TABLE IF NOT EXISTS chat_room_reads (
+  chat_room_id  uuid        NOT NULL REFERENCES chat_rooms(id),
+  profile_id    uuid        NOT NULL REFERENCES profiles(id),
+  last_read_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (chat_room_id, profile_id)
+);
+
+ALTER TABLE chat_room_reads ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated read all chat room reads"
+  ON chat_room_reads FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "User upserts own chat room read"
+  ON chat_room_reads FOR INSERT TO authenticated
+  WITH CHECK (profile_id = auth.uid());
+
+CREATE POLICY "User updates own chat room read"
+  ON chat_room_reads FOR UPDATE TO authenticated
+  USING (profile_id = auth.uid());

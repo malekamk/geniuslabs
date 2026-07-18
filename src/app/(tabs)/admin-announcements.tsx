@@ -4,13 +4,14 @@ import { sendNotifications } from '@/utils/notify';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView,
+  Alert, FlatList, KeyboardAvoidingView,
   Modal, Platform, Pressable, ScrollView, StyleSheet,
   TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { LoadingDots } from '@/components/loading-dots';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/utils/supabase';
 import { Spacing } from '@/constants/theme';
@@ -153,7 +154,7 @@ export default function AdminAnnouncements() {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={PRIMARY} />
+        <LoadingDots style={{ marginTop: 40 }} />
       ) : (
         <FlatList
           data={items}
@@ -274,7 +275,7 @@ export default function AdminAnnouncements() {
 
               <Tap style={[s.sendBtn, saving && { opacity: 0.6 }]} onPress={send} activeOpacity={0.85} disabled={saving}>
                 {saving
-                  ? <ActivityIndicator color="#fff" />
+                  ? <LoadingDots color="#fff" />
                   : <><Ionicons name="send-outline" size={16} color="#fff" />
                     <ThemedText style={s.sendText}>Send Announcement</ThemedText></>}
               </Tap>

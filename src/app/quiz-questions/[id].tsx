@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { LoadingRow } from '@/components/loading-dots';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useSupabaseQuery } from '@/hooks/use-supabase-query';
 import { supabase } from '@/utils/supabase';
@@ -95,7 +96,7 @@ export default function QuizQuestionsScreen() {
 
           {/* Existing questions */}
           {loading ? (
-            <ThemedText style={styles.hint}>Loading…</ThemedText>
+            <LoadingRow label="Loading…" />
           ) : questions.length === 0 ? (
             <View style={styles.empty}>
               <Ionicons name="help-circle-outline" size={36} color="#D1D5DB" />
@@ -208,9 +209,11 @@ export default function QuizQuestionsScreen() {
                 </Pressable>
                 <Pressable style={[styles.actionBtn, { backgroundColor: PRIMARY, flex: 1 }, saving && { opacity: 0.6 }]}
                   onPress={handleSave} disabled={saving}>
-                  <ThemedText style={[styles.actionBtnText, { color: '#fff' }]}>
-                    {saving ? 'Saving…' : 'Save Question'}
-                  </ThemedText>
+                  {saving ? (
+                    <LoadingRow label="Saving…" color="#fff" textColor="#fff" />
+                  ) : (
+                    <ThemedText style={[styles.actionBtnText, { color: '#fff' }]}>Save Question</ThemedText>
+                  )}
                 </Pressable>
               </View>
             </View>

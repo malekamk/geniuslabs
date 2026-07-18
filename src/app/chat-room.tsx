@@ -16,10 +16,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import { ThemedText } from '@/components/themed-text';
+import { LoadingRow } from '@/components/loading-dots';
 import { useAuth } from '@/context/auth-context';
 import { useNotifications } from '@/context/notification-context';
 import { supabase } from '@/utils/supabase';
-import type { ChatRoomMessage } from '@/types/db';
+import { log } from '@/utils/logger';
+import type { ChatRoomMessage, ChatRoomRead } from '@/types/db';
 import { Spacing } from '@/constants/theme';
 
 const PRIMARY = '#1565C0';
@@ -85,6 +87,7 @@ export default function ChatRoomScreen() {
 
   const [chatRoomId, setChatRoomId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MsgWithSender[]>([]);
+  const [reads, setReads] = useState<ChatRoomRead[]>([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -116,6 +119,14 @@ export default function ChatRoomScreen() {
         const full: MsgWithSender = { ...msg, sender_name: p?.full_name ?? 'Unknown' };
         setMessages(prev => [...prev, full]);
         AsyncStorage.setItem(`chat_read_${subjectId}_${grade}`, msg.created_at);
+        if (profile) {
+          supabase.from('chat_room_reads').upsert({
+            chat_room_id: chatRoomId,
+            profile_id: profile.id,
+            last_read_at: msg.created_at,
+          }, { onConflict: 'chat_room_id,profile_id' });
+        }
+        fetchReads();
         setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
         if (msg.sender_id !== profile?.id)
           triggerLocal(`${subjectName} · Grade ${grade}`, `${p?.full_name ?? 'Someone'}: ${msg.content.slice(0, 80)}`);
@@ -145,10 +156,29 @@ export default function ChatRoomScreen() {
     const msgs = (data ?? []).map((m: any) => ({ ...m, sender_name: m.sender?.full_name ?? 'Unknown' }));
     setMessages(msgs);
     if (msgs.length && subjectId && grade) {
-      AsyncStorage.setItem(`chat_read_${subjectId}_${grade}`, msgs[msgs.length - 1].created_at);
+      const lastCreatedAt = msgs[msgs.length - 1].created_at;
+      AsyncStorage.setItem(`chat_read_${subjectId}_${grade}`, lastCreatedAt);
+      if (profile) {
+        supabase.from('chat_room_reads').upsert({
+          chat_room_id: chatRoomId,
+          profile_id: profile.id,
+          last_read_at: lastCreatedAt,
+        }, { onConflict: 'chat_room_id,profile_id' });
+      }
     }
+    fetchReads();
     setLoading(false);
     setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 120);
+  }
+
+  async function fetchReads() {
+    if (!chatRoomId || !profile) return;
+    const { data } = await supabase
+      .from('chat_room_reads')
+      .select('*')
+      .eq('chat_room_id', chatRoomId)
+      .neq('profile_id', profile.id);
+    setReads(data ?? []);
   }
 
   async function send() {
@@ -164,7 +194,7 @@ export default function ChatRoomScreen() {
       content,
     });
     if (error) {
-      console.warn('chat send error', error.message, error.code);
+      log.warn('ChatRoom', 'Send failed', error);
       Alert.alert('Send failed', error.message);
       setText(content); // restore text so user doesn't lose it
     }
@@ -199,7 +229,7 @@ export default function ChatRoomScreen() {
       {/* Messages */}
       {loading ? (
         <View style={styles.loadingWrap}>
-          <ThemedText style={styles.loadingText}>Loading…</ThemedText>
+          <LoadingRow label="Loading…" />
         </View>
       ) : messages.length === 0 ? (
         <View style={styles.emptyWrap}>
@@ -215,12 +245,16 @@ export default function ChatRoomScreen() {
           renderItem={({ item }) => {
             if (item.type === 'date') return <DateDivider label={item.label} />;
             const mine = item.data.sender_id === profile?.id;
+            const seenCount = mine && item.isLast
+              ? reads.filter(r => r.last_read_at >= item.data.created_at).length
+              : 0;
             return (
               <Bubble
                 msg={item.data}
                 mine={mine}
                 isFirst={item.isFirst}
                 isLast={item.isLast}
+                seenCount={seenCount}
               />
             );
           }}
@@ -268,8 +302,8 @@ const dd = StyleSheet.create({
 
 // ── Bubble ────────────────────────────────────────────────────────────────────
 
-function Bubble({ msg, mine, isFirst, isLast }: {
-  msg: MsgWithSender; mine: boolean; isFirst: boolean; isLast: boolean;
+function Bubble({ msg, mine, isFirst, isLast, seenCount }: {
+  msg: MsgWithSender; mine: boolean; isFirst: boolean; isLast: boolean; seenCount?: number;
 }) {
   const isTutor = msg.sender_role === 'tutor';
   const avatarColor = isTutor ? TUTOR_COLOR : PRIMARY;
@@ -321,6 +355,11 @@ function Bubble({ msg, mine, isFirst, isLast }: {
             {fmtTime(msg.created_at)}
           </ThemedText>
         )}
+
+        {/* Seen by — trailing indicator on sender's own latest message only */}
+        {mine && isLast && !!seenCount && (
+          <ThemedText style={b.seenBy}>Seen by {seenCount}</ThemedText>
+        )}
       </View>
     </View>
   );
@@ -358,6 +397,8 @@ const b = StyleSheet.create({
   time: { fontSize: 11, color: '#8E8E93', marginTop: 2 },
   timeMine:  { alignSelf: 'flex-end', marginRight: 2 },
   timeOther: { alignSelf: 'flex-start', marginLeft: 4 },
+
+  seenBy: { fontSize: 11, color: '#8E8E93', alignSelf: 'flex-end', marginRight: 2, marginTop: 1 },
 });
 
 // ── Screen styles ─────────────────────────────────────────────────────────────

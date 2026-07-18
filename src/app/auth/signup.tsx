@@ -14,9 +14,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { GoogleIcon } from '@/components/google-icon';
+import { LoadingDots } from '@/components/loading-dots';
 import { Spacing } from '@/constants/theme';
 import { supabase } from '@/utils/supabase';
 import { log } from '@/utils/logger';
+import { signInWithProvider } from '@/utils/oauth';
 
 const PRIMARY = '#1565C0';
 const BG = '#F7F9F8';
@@ -34,6 +37,20 @@ export default function SignupScreen() {
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null);
+
+  async function handleOAuth(provider: 'google' | 'apple') {
+    setOauthLoading(provider);
+    try {
+      await signInWithProvider(provider);
+      // navigation onward (incl. the one-time role picker for new users) handled by _layout.tsx
+    } catch (e: any) {
+      log.error('Signup', `${provider} sign-in failed`, e);
+      Alert.alert('Sign-in Failed', e?.message ?? 'Please try again.');
+    } finally {
+      setOauthLoading(null);
+    }
+  }
 
   async function handleSignup() {
     if (!fullName.trim()) return Alert.alert('Required', 'Please enter your full name.');
@@ -83,9 +100,21 @@ export default function SignupScreen() {
         p_learner_name:   fullName.trim(),
         p_user_id:        data.user.id,
       });
-      if (linkErr) log.warn('Signup', 'Learner link failed', linkErr);
-      else if (linked) log.ok('Signup', 'Learner linked to guardian account');
-      else log.warn('Signup', 'No matching learner row found — guardian may not have enrolled them yet');
+      if (linkErr) {
+        log.warn('Signup', 'Learner link failed', linkErr);
+        Alert.alert(
+          'Account Created',
+          "We couldn't automatically link you to your enrolment. Contact us if your classes don't show up."
+        );
+      } else if (linked) {
+        log.ok('Signup', 'Learner linked to guardian account');
+      } else {
+        log.warn('Signup', 'No matching learner row found — guardian may not have enrolled them yet');
+        Alert.alert(
+          'Account Created',
+          "We couldn't find a matching enrolment for you yet. Ask your guardian to enrol you, then contact us to link your account."
+        );
+      }
     }
 
     setLoading(false);
@@ -231,6 +260,44 @@ export default function SignupScreen() {
               {loading ? 'Creating account…' : 'Create Account'}
             </ThemedText>
           </Pressable>
+
+          <View style={styles.orDivider}>
+            <View style={styles.orDividerLine} />
+            <ThemedText style={styles.orDividerText}>or continue with</ThemedText>
+            <View style={styles.orDividerLine} />
+          </View>
+
+          <View style={{ gap: Spacing.three }}>
+            <Pressable
+              style={[styles.oauthBtn, oauthLoading === 'google' && { opacity: 0.6 }]}
+              disabled={!!oauthLoading}
+              onPress={() => handleOAuth('google')}>
+              {oauthLoading === 'google' ? (
+                <LoadingDots />
+              ) : (
+                <>
+                  <GoogleIcon size={18} />
+                  <ThemedText style={styles.oauthBtnText}>Continue with Google</ThemedText>
+                </>
+              )}
+            </Pressable>
+
+            {Platform.OS === 'ios' && (
+              <Pressable
+                style={[styles.oauthBtn, styles.appleBtn, oauthLoading === 'apple' && { opacity: 0.6 }]}
+                disabled={!!oauthLoading}
+                onPress={() => handleOAuth('apple')}>
+                {oauthLoading === 'apple' ? (
+                  <LoadingDots color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="logo-apple" size={20} color="#fff" />
+                    <ThemedText style={[styles.oauthBtnText, { color: '#fff' }]}>Continue with Apple</ThemedText>
+                  </>
+                )}
+              </Pressable>
+            )}
+          </View>
         </View>
 
         {/* FOOTER */}
@@ -308,6 +375,18 @@ const styles = StyleSheet.create({
     borderRadius: 8, alignItems: 'center', marginTop: Spacing.one,
   },
   submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+  orDivider: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginTop: Spacing.three },
+  orDividerLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
+  orDividerText: { fontSize: 12, fontWeight: '600', color: '#9CA3AF' },
+
+  oauthBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8,
+    paddingVertical: Spacing.three, backgroundColor: '#fff',
+  },
+  oauthBtnText: { fontSize: 15, fontWeight: '600', color: '#111827' },
+  appleBtn: { backgroundColor: '#000', borderColor: '#000' },
 
   footer: { flexDirection: 'row', justifyContent: 'center', gap: 6 },
   footerText: { fontSize: 13, color: '#6B7280' },

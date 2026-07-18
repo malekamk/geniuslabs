@@ -45,7 +45,7 @@ export default function QuizScreen() {
       <View style={styles.center}>
         <Ionicons name="help-circle-outline" size={48} color="#D1D5DB" />
         <ThemedText style={styles.emptyTitle}>Quiz Coming Soon</ThemedText>
-        <ThemedText style={styles.hint}>The tutor hasn't added questions yet.</ThemedText>
+        <ThemedText style={styles.hint}>The tutor hasn&apos;t added questions yet.</ThemedText>
         <Pressable style={styles.backBtn} onPress={() => router.back()}>
           <ThemedText style={styles.backBtnText}>Go Back</ThemedText>
         </Pressable>

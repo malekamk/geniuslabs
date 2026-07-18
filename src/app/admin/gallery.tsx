@@ -5,13 +5,14 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Dimensions, FlatList, KeyboardAvoidingView,
+  Alert, Dimensions, FlatList, KeyboardAvoidingView,
   Modal, Platform, Pressable, StyleSheet, TextInput, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
+import { LoadingDots } from '@/components/loading-dots';
 import { supabase } from '@/utils/supabase';
 import { uploadToStorage } from '@/utils/upload';
 import { Spacing } from '@/constants/theme';
@@ -108,13 +109,13 @@ export default function AdminGallery() {
         </View>
         <Pressable style={s.addBtn} onPress={pickAndUpload} disabled={uploading}>
           {uploading
-            ? <ActivityIndicator size="small" color={PRIMARY} />
+            ? <LoadingDots size={6} />
             : <><Ionicons name="add" size={18} color={PRIMARY} /><ThemedText style={s.addText}>Add</ThemedText></>}
         </Pressable>
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={PRIMARY} />
+        <LoadingDots style={{ marginTop: 40, alignSelf: 'center' }} />
       ) : items.length === 0 ? (
         <View style={s.empty}>
           <Ionicons name="images-outline" size={52} color="#D1D5DB" />

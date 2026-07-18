@@ -268,6 +268,12 @@ export interface ChatRoomMessage {
   sender?: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>;
 }
 
+export interface ChatRoomRead {
+  chat_room_id: string;
+  profile_id: string;
+  last_read_at: string;
+}
+
 export interface Notification {
   id: string;
   profile_id: string;

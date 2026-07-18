@@ -2,10 +2,11 @@
 import { router, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { LoadingDots } from '@/components/loading-dots';
 import { supabase } from '@/utils/supabase';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import type { EnrolmentApplication } from '@/types/db';
@@ -76,7 +77,7 @@ export default function AdminEnrolments() {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={PRIMARY} />
+        <LoadingDots style={{ marginTop: 40 }} />
       ) : apps.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="document-text-outline" size={40} color="#D1D5DB" />

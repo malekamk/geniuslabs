@@ -1,21 +1,26 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { LoadingRow } from '@/components/loading-dots';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useNotifications } from '@/context/notification-context';
 import { useSupabaseQuery } from '@/hooks/use-supabase-query';
 import { Alert, Linking } from 'react-native';
 import { supabase } from '@/utils/supabase';
+import { getCachedMaterialUri, isMaterialCached } from '@/utils/offline-cache';
 import type { Material as DBMaterial, Quiz as DBQuiz, Learner, EnrolmentApplication, UserMaterialProgress } from '@/types/db';
 
 const PRIMARY = '#1565C0';
 const BLUE = '#1565C0';
 const BG = '#F7F9F8';
+// Postgres rejects '' for a uuid column (22P02) — use this instead of ?? '' so an
+// unresolved id just filters to zero rows rather than throwing.
+const NULL_UUID = '00000000-0000-0000-0000-000000000000';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 type Status = 'new' | 'in-progress' | 'done';
@@ -73,28 +78,63 @@ function MaterialCard({ item, onAction, onDelete }: { item: Material; onAction: 
 
   const accentColor = isDone ? '#16A34A' : cfg.grad[0];
   const meta = [subjectName, item.grade?.replace('Grade ', 'Gr ')].filter(Boolean).join(' · ');
+  const [cached, setCached] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    if (!item.file_url) return;
+    let active = true;
+    isMaterialCached(item.id).then(v => { if (active) setCached(v); });
+    return () => { active = false; };
+  }, [item.id, item.file_url]);
+
+  async function open() {
+    onAction(item.id, next);
+    if (isDone) return;
+    if (item.external_url) {
+      Linking.openURL(item.external_url).catch(() => {
+        Alert.alert('Could not open', 'This file link is broken or unsupported on your device.');
+      });
+      return;
+    }
+    if (!item.file_url) return;
+    setDownloading(true);
+    try {
+      // A file:// URI opens fine via Linking for PDFs on both platforms.
+      const localUri = await getCachedMaterialUri(item.id, item.file_url);
+      setCached(true);
+      await Linking.openURL(localUri);
+    } catch {
+      Linking.openURL(item.file_url).catch(() => {
+        Alert.alert('Could not open', 'This file link is broken or unsupported on your device.');
+      });
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   return (
     <Pressable
       style={({ pressed }) => [mc.card, pressed && { opacity: 0.93 }]}
-      onPress={() => {
-        onAction(item.id, next);
-        const url = item.external_url ?? item.file_url;
-        if (!isDone && url) Linking.openURL(url).catch(() => {});
-      }}>
+      onPress={open}>
       <View style={[mc.accent, { backgroundColor: accentColor }]} />
       <View style={mc.inner}>
         <View style={[mc.iconBox, { backgroundColor: accentColor + '18' }]}>
           <Ionicons name={isDone ? 'checkmark-circle' : cfg.icon} size={22} color={accentColor} />
+          {!!item.file_url && cached && (
+            <View style={mc.offlineBadge}>
+              <Ionicons name="checkmark-done-outline" size={9} color="#fff" />
+            </View>
+          )}
         </View>
         <View style={mc.textCol}>
           <ThemedText style={mc.title} numberOfLines={2}>{item.title}</ThemedText>
-          <ThemedText style={mc.meta}>{cfg.label}{meta ? ` · ${meta}` : ''}</ThemedText>
+          <ThemedText style={mc.meta}>{cfg.label}{meta ? ` · ${meta}` : ''}{cached ? ' · Available offline' : ''}</ThemedText>
         </View>
         <View style={mc.actions}>
-          <Pressable style={[mc.ctaBtn, isDone && mc.ctaBtnDone]} onPress={() => onAction(item.id, next)} hitSlop={6}>
+          <Pressable style={[mc.ctaBtn, isDone && mc.ctaBtnDone]} onPress={open} hitSlop={6}>
             <ThemedText style={[mc.ctaLabel, isDone && mc.ctaLabelDone]}>
-              {isDone ? 'Done' : cfg.actionLabel}
+              {isDone ? 'Done' : downloading ? 'Downloading…' : cfg.actionLabel}
             </ThemedText>
           </Pressable>
           {onDelete && (
@@ -217,7 +257,8 @@ function InlineError({ message, onRetry }: { message: string; onRetry: () => voi
   );
 }
 
-const FILTERS: Filter[] = ['All', 'Materials', 'Quizzes'];
+// Quizzes are paused for MVP — filter tab hidden until re-enabled.
+const FILTERS: Filter[] = ['All', 'Materials'];
 
 export default function TasksScreen() {
   const insets = useSafeAreaInsets();
@@ -228,7 +269,7 @@ export default function TasksScreen() {
 
   const { data: progressRows, refetch: progressRefetch } = useSupabaseQuery<UserMaterialProgress>(
     'user_material_progress',
-    { filter: q => q.eq('profile_id', user?.id ?? '') }
+    { filter: q => q.eq('profile_id', user?.id ?? NULL_UUID) }
   );
   const statusMap: Record<string, Status> = Object.fromEntries(
     progressRows.map(p => [p.material_id, p.status as Status])
@@ -268,12 +309,17 @@ export default function TasksScreen() {
   const learnerGrade = isLearner ? (profile?.grades?.[0] ?? null) : null;
 
   const { data: guardianLearners } = useSupabaseQuery<Learner>('learners', {
-    filter: q => q.eq('guardian_id', user?.id ?? ''),
+    filter: q => q.eq('guardian_id', user?.id ?? NULL_UUID),
   });
-  const { data: myApps } = useSupabaseQuery<EnrolmentApplication>('enrolment_applications', {
+  const { data: ownLearnerRow } = useSupabaseQuery<Learner>('learners', {
+    filter: q => q.eq('profile_id', isLearner ? (user?.id ?? NULL_UUID) : NULL_UUID),
+  });
+  const { data: myApps, refetch: refetchMyApps } = useSupabaseQuery<EnrolmentApplication>('enrolment_applications', {
     select: 'subjects',
-    filter: q => q.eq('learner_name', isLearner ? (profile?.full_name ?? '') : ''),
+    filter: q => q.eq('learner_id', isLearner ? (ownLearnerRow[0]?.id ?? NULL_UUID) : NULL_UUID),
   });
+  // useSupabaseQuery captures its filter once on mount — refetch once the learner id is known.
+  useEffect(() => { if (ownLearnerRow[0]?.id) refetchMyApps(); }, [ownLearnerRow[0]?.id]);
   const enrolledSubjects: string[] = myApps[0]?.subjects ?? [];
 
   const learnerGrades = [...new Set(guardianLearners.map(l => l.grade))];
@@ -325,11 +371,9 @@ export default function TasksScreen() {
 
   const platformPaddingTop = Platform.select({ web: Spacing.six, default: insets.top });
 
-  const doneCount = [
-    ...materials.filter((m) => m.localStatus === 'done'),
-    ...quizzes.filter((q) => q.localStatus === 'done'),
-  ].length;
-  const totalCount = materials.length + quizzes.length;
+  // Quizzes are paused for MVP — progress counts materials only.
+  const doneCount = materials.filter((m) => m.localStatus === 'done').length;
+  const totalCount = materials.length;
   const progressPct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
 
   return (
@@ -357,12 +401,14 @@ export default function TasksScreen() {
                 <Ionicons name="document-attach-outline" size={16} color="#fff" />
                 <ThemedText style={styles.createBtnText}>Material</ThemedText>
               </Pressable>
+              {/* Quiz creation paused for MVP
               <Pressable
                 style={({ pressed }) => [styles.createBtn, { backgroundColor: '#1565C0', opacity: pressed ? 0.85 : 1 }]}
                 onPress={() => router.push('/create-quiz')}>
                 <Ionicons name="help-circle-outline" size={16} color="#fff" />
                 <ThemedText style={styles.createBtnText}>Quiz</ThemedText>
               </Pressable>
+              */}
             </View>
           ) : !isLearner && (
             <Pressable
@@ -420,8 +466,7 @@ export default function TasksScreen() {
               <InlineError message="Could not load materials" onRetry={matRefetch} />
             ) : matLoading ? (
               <View style={styles.loadingRow}>
-                <Ionicons name="sync-outline" size={16} color="#9CA3AF" />
-                <ThemedText style={styles.loadingText}>Loading…</ThemedText>
+                <LoadingRow label="Loading…" />
               </View>
             ) : (
               <View style={styles.list}>
@@ -431,32 +476,7 @@ export default function TasksScreen() {
           </>
         )}
 
-        {/* QUIZZES */}
-        {(filter === 'All' || filter === 'Quizzes') && (
-          <>
-            <SectionLabel title="Quizzes" count={quizzes.length} />
-            {quizError ? (
-              <InlineError message="Could not load quizzes" onRetry={quizRefetch} />
-            ) : quizLoading ? (
-              <View style={styles.loadingRow}>
-                <Ionicons name="sync-outline" size={16} color="#9CA3AF" />
-                <ThemedText style={styles.loadingText}>Loading…</ThemedText>
-              </View>
-            ) : (
-              <View style={styles.list}>
-                {quizzes.map(q => (
-                  <QuizCard
-                    key={q.id}
-                    item={q}
-                    isTutor={isTutor}
-                    onStart={() => router.push({ pathname: '/quiz/[id]', params: { id: q.id, title: q.title, pass_score: String(q.pass_score) } })}
-                    onDelete={() => deleteQuiz(q.id, q.title)}
-                  />
-                ))}
-              </View>
-            )}
-          </>
-        )}
+        {/* QUIZZES — paused for MVP */}
 
       </View>
     </ScrollView>
@@ -475,7 +495,12 @@ const mc = StyleSheet.create({
     flex: 1, flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 12, paddingVertical: 14, gap: 12,
   },
-  iconBox: { width: 42, height: 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  iconBox: { width: 42, height: 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' },
+  offlineBadge: {
+    position: 'absolute', right: -3, bottom: -3, width: 16, height: 16, borderRadius: 8,
+    backgroundColor: '#16A34A', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: '#fff',
+  },
   textCol: { flex: 1, gap: 3 },
   title: { fontSize: 14, fontWeight: '700', color: '#111827', lineHeight: 20 },
   meta: { fontSize: 12, color: '#9CA3AF', fontWeight: '400' },

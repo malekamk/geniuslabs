@@ -21,10 +21,12 @@ const PayBtn = TouchableOpacity as any;
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { LoadingRow } from '@/components/loading-dots';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { ALL_GRADES, ALL_OFFERED_SUBJECTS } from '@/constants/curriculum';
 import { useAuth } from '@/context/auth-context';
 import { useClasses } from '@/context/classes-context';
+import { useNotifications } from '@/context/notification-context';
 import { useSupabaseQuery } from '@/hooks/use-supabase-query';
 import { supabase } from '@/utils/supabase';
 import { log } from '@/utils/logger';
@@ -32,6 +34,9 @@ import type { Learner, Payment, EnrolmentApplication, Profile as TutorProfile, Q
 
 const PRIMARY = '#1565C0';
 const BG = '#F7F9F8';
+// Postgres rejects '' for a uuid column (22P02) — use this instead of ?? '' so an
+// unresolved id just filters to zero rows rather than throwing.
+const NULL_UUID = '00000000-0000-0000-0000-000000000000';
 
 const CONTACT = {
   phone: '0140040463',
@@ -112,22 +117,25 @@ export default function ProfileScreen() {
   const isLearner  = profile?.role === 'learner';
 
   const { data: myLearnerRow } = useSupabaseQuery<Learner>('learners', {
-    filter: q => q.eq('profile_id', user?.id ?? ''),
+    filter: q => q.eq('profile_id', user?.id ?? NULL_UUID),
   });
   const myLearner = myLearnerRow[0] ?? null;
 
   const { data: learners, loading: learnersLoading, refetch: refetchLearners } =
     useSupabaseQuery<Learner>('learners', {
-      filter: q => q.eq('guardian_id', user?.id ?? ''),
+      filter: q => q.eq('guardian_id', user?.id ?? NULL_UUID),
     });
 
   const { data: applications, refetch: refetchApps } =
     useSupabaseQuery<EnrolmentApplication>('enrolment_applications', {
       select: 'id, learner_name, subjects, status, submitted_at, birth_cert_url, school_report_url, additional_file_url',
       filter: q => isLearner
-        ? q.eq('learner_name', myLearner?.full_name ?? profile?.full_name ?? '').order('submitted_at', { ascending: false })
-        : q.eq('guardian_profile_id', user?.id ?? '').order('submitted_at', { ascending: false }),
+        ? q.eq('learner_id', myLearner?.id ?? NULL_UUID).order('submitted_at', { ascending: false })
+        : q.eq('guardian_profile_id', user?.id ?? NULL_UUID).order('submitted_at', { ascending: false }),
     });
+
+  // useSupabaseQuery captures its filter once on mount — refetch once the learner id is known.
+  useEffect(() => { if (myLearner?.id) refetchApps(); }, [myLearner?.id]);
 
   useFocusEffect(useCallback(() => {
     refetchLearners();
@@ -137,7 +145,7 @@ export default function ProfileScreen() {
   const { data: payments, loading: paymentsLoading } =
     useSupabaseQuery<Payment>('payments', {
       select: '*',
-      filter: q => q.eq('guardian_id', user?.id ?? '').order('due_date', { ascending: false }),
+      filter: q => q.eq('guardian_id', user?.id ?? NULL_UUID).order('due_date', { ascending: false }),
     });
 
   const { data: allTutors } = useSupabaseQuery<TutorProfile>('profiles', {
@@ -147,12 +155,50 @@ export default function ProfileScreen() {
   const { data: myClasses, loading: classesLoading } =
     useSupabaseQuery<{ id: string }>('classes', {
       select: 'id',
-      filter: q => q.or(`tutor_id.eq.${user?.id ?? ''},created_by.eq.${user?.id ?? ''}`),
+      filter: q => q.or(`tutor_id.eq.${user?.id ?? NULL_UUID},created_by.eq.${user?.id ?? NULL_UUID}`),
     });
 
   const { classes: allClasses } = useClasses();
+  const { permissionStatus, enableNotifications } = useNotifications();
 
   const [selectedLearner, setSelectedLearner] = useState<Learner | null>(null);
+  const [payingFee, setPayingFee] = useState<string | null>(null);
+  const [resumingPaymentId, setResumingPaymentId] = useState<string | null>(null);
+
+  async function startPayment(learner: Learner, fee: { label: string; amount: number; feeType: string }) {
+    setPayingFee(fee.label);
+    const { data, error } = await supabase.functions.invoke('create-checkout', {
+      body: { learnerId: learner.id, feeType: fee.feeType, title: fee.label, amount: fee.amount },
+    });
+    setPayingFee(null);
+    if (error || !data?.checkoutUrl) {
+      log.error('Payment', 'create-checkout failed', error ?? data);
+      Alert.alert('Error', 'Could not start payment. Please try again.');
+      return;
+    }
+    setSelectedLearner(null);
+    router.push({
+      pathname: '/payment-webview',
+      params: { url: data.checkoutUrl, title: fee.label, paymentId: data.paymentId },
+    } as any);
+  }
+
+  async function resumePayment(payment: Payment) {
+    setResumingPaymentId(payment.id);
+    const { data, error } = await supabase.functions.invoke('create-checkout', {
+      body: { paymentId: payment.id },
+    });
+    setResumingPaymentId(null);
+    if (error || !data?.checkoutUrl) {
+      log.error('Payment', 'resume create-checkout failed', error ?? data);
+      Alert.alert('Error', 'Could not resume this payment. Please try again.');
+      return;
+    }
+    router.push({
+      pathname: '/payment-webview',
+      params: { url: data.checkoutUrl, title: payment.description ?? 'Payment', paymentId: data.paymentId },
+    } as any);
+  }
 
   // Guardian edit-learner state
   const [editMode, setEditMode]   = useState(false);
@@ -169,7 +215,6 @@ export default function ProfileScreen() {
     : null;
 
   // Use a null-UUID fallback — returns 0 rows without crashing on invalid UUID
-  const NULL_UUID = '00000000-0000-0000-0000-000000000000';
   const learnerProfileId = selectedLearner?.profile_id ?? NULL_UUID;
 
   const { data: learnerAttempts, refetch: refetchAttempts } = useSupabaseQuery<QuizAttempt>('quiz_attempts', {
@@ -405,7 +450,7 @@ export default function ProfileScreen() {
             <View style={styles.cardList}>
               {learnersLoading ? (
                 <View style={styles.emptyCard}>
-                  <ThemedText style={styles.emptyText}>Loading…</ThemedText>
+                  <LoadingRow label="Loading…" />
                 </View>
               ) : (
                 learners.map(l => {
@@ -423,11 +468,11 @@ export default function ProfileScreen() {
                         <ThemedText style={styles.learnerName}>{l.full_name}</ThemedText>
                         <ThemedText style={styles.learnerMeta}>{l.grade}{l.school_name ? ` · ${l.school_name}` : ''}</ThemedText>
                       </View>
-                      {/* {app?.status && (
+                      {app?.status && (
                         <View style={[styles.statusChip, { backgroundColor: statusCfg.bg }]}>
                           <ThemedText style={[styles.statusChipText, { color: statusCfg.text }]}>{statusCfg.label}</ThemedText>
                         </View>
-                      )} */}
+                      )}
                       <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 4 }} />
                     </Pressable>
                   );
@@ -463,7 +508,7 @@ export default function ProfileScreen() {
             <View style={styles.cardList}>
               {paymentsLoading ? (
                 <View style={styles.emptyCard}>
-                  <ThemedText style={styles.emptyText}>Loading…</ThemedText>
+                  <LoadingRow label="Loading…" />
                 </View>
               ) : payments.length === 0 ? (
                 <View style={styles.emptyCard}>
@@ -473,24 +518,37 @@ export default function ProfileScreen() {
               ) : (
                 payments.map(p => {
                   const statusStyle = PAYMENT_STATUS_COLOR[p.status] ?? PAYMENT_STATUS_COLOR.pending;
+                  const isResuming = resumingPaymentId === p.id;
                   return (
-                    <View key={p.id} style={styles.paymentRow}>
-                      <View style={styles.paymentLeft}>
-                        <ThemedText style={styles.paymentType}>
-                          {p.type.charAt(0).toUpperCase() + p.type.slice(1)}
-                        </ThemedText>
-                        <ThemedText style={styles.paymentDate}>
-                          {p.due_date ? `Due ${new Date(p.due_date).toLocaleDateString('en-ZA')}` : 'No due date'}
-                        </ThemedText>
-                      </View>
-                      <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                        <ThemedText style={styles.paymentAmount}>R {Number(p.amount).toFixed(2)}</ThemedText>
-                        <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                          <ThemedText style={[styles.statusText, { color: statusStyle.text }]}>
-                            {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                    <View key={p.id} style={p.status === 'pending' ? styles.paymentRowWithAction : styles.paymentRow}>
+                      <View style={styles.paymentRow}>
+                        <View style={styles.paymentLeft}>
+                          <ThemedText style={styles.paymentType}>
+                            {p.type.charAt(0).toUpperCase() + p.type.slice(1)}
+                          </ThemedText>
+                          <ThemedText style={styles.paymentDate}>
+                            {p.due_date ? `Due ${new Date(p.due_date).toLocaleDateString('en-ZA')}` : 'No due date'}
                           </ThemedText>
                         </View>
+                        <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                          <ThemedText style={styles.paymentAmount}>R {Number(p.amount).toFixed(2)}</ThemedText>
+                          <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+                            <ThemedText style={[styles.statusText, { color: statusStyle.text }]}>
+                              {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                            </ThemedText>
+                          </View>
+                        </View>
                       </View>
+                      {p.status === 'pending' && (
+                        <Pressable
+                          style={styles.resumePayBtn}
+                          disabled={isResuming}
+                          onPress={() => resumePayment(p)}>
+                          <ThemedText style={styles.resumePayBtnText}>
+                            {isResuming ? 'Starting…' : 'Pay Now'}
+                          </ThemedText>
+                        </Pressable>
+                      )}
                     </View>
                   );
                 })
@@ -601,6 +659,33 @@ export default function ProfileScreen() {
                 <Ionicons name="document-text-outline" size={20} color={PRIMARY} />
                 <ThemedText style={styles.adminRowText}>View Enrolment Applications</ThemedText>
                 <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+              </Pressable>
+            </View>
+          </>
+        )}
+
+        {/* ── NOTIFICATIONS ── */}
+        {Platform.OS !== 'web' && (
+          <>
+            <SectionLabel title="Notifications" />
+            <View style={styles.cardList}>
+              <Pressable
+                style={styles.contactRow}
+                disabled={permissionStatus === 'granted'}
+                onPress={enableNotifications}>
+                <View style={[styles.contactIcon, { backgroundColor: PRIMARY + '18' }]}>
+                  <Ionicons name="notifications" size={18} color={PRIMARY} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={styles.contactLabel}>Push Notifications</ThemedText>
+                  <ThemedText style={[
+                    styles.contactSub,
+                    permissionStatus === 'granted' ? styles.notifStatusOn : styles.notifStatusOff,
+                  ]}>
+                    {permissionStatus === 'granted' ? 'Enabled' : 'Off — tap to enable'}
+                  </ThemedText>
+                </View>
+                {permissionStatus !== 'granted' && <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />}
               </Pressable>
             </View>
           </>
@@ -824,32 +909,7 @@ export default function ProfileScreen() {
                 );
               })()}
 
-              {/* Quiz results */}
-              {learnerAttempts.length > 0 && (
-                <>
-                  <ThemedText style={styles.modalSectionLabel}>QUIZ RESULTS</ThemedText>
-                  {learnerAttempts.map(a => {
-                    const passed = a.passed ?? false;
-                    const quiz = (a as any).quiz;
-                    return (
-                      <View key={a.id} style={styles.progressRow}>
-                        <Ionicons name={passed ? 'checkmark-circle' : 'close-circle'} size={18} color={passed ? PRIMARY : '#EF4444'} />
-                        <View style={{ flex: 1 }}>
-                          <ThemedText style={styles.progressTitle}>{quiz?.title ?? 'Quiz'}</ThemedText>
-                          <ThemedText style={styles.progressMeta}>
-                            {a.completed_at ? new Date(a.completed_at).toLocaleDateString('en-ZA') : ''}
-                          </ThemedText>
-                        </View>
-                        <View style={[styles.statusChip, { backgroundColor: passed ? '#D1FAE5' : '#FEE2E2' }]}>
-                          <ThemedText style={[styles.statusChipText, { color: passed ? '#065F46' : '#991B1B' }]}>
-                            {a.score ?? 0}%
-                          </ThemedText>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </>
-              )}
+              {/* Quiz results — paused for MVP */}
 
               {/* Material progress */}
               {learnerProgress.length > 0 && (
@@ -882,42 +942,40 @@ export default function ProfileScreen() {
 
               {/* ── PAY FOR THIS LEARNER ── */}
               <ThemedText style={styles.modalSectionLabel}>MAKE A PAYMENT</ThemedText>
-              <View style={{ gap: Spacing.two, marginBottom: Spacing.three }}>
-                {[
-                  { label: 'Monthly Tuition',         note: 'R890 per subject / month', amount: 890, feeType: 'tuition' },
-                  { label: 'Psychological Assessment', note: 'Once-off fee',             amount: 250, feeType: 'registration' },
-                ].map(fee => (
-                  <View key={fee.label} style={styles.feeRow}>
-                    <View style={styles.feeTop}>
-                      <View style={{ flex: 1 }}>
-                        <ThemedText style={styles.feeLabel}>{fee.label}</ThemedText>
-                        <ThemedText style={styles.feeNote}>{fee.note}</ThemedText>
+              {app && app.status !== 'approved' ? (
+                <View style={styles.feePrompt}>
+                  <Ionicons name="lock-closed-outline" size={18} color={PRIMARY} />
+                  <ThemedText style={styles.feePromptText}>
+                    Payment unlocks once the application is approved. Current status: {statusCfg.label}.
+                  </ThemedText>
+                </View>
+              ) : (
+                <View style={{ gap: Spacing.two, marginBottom: Spacing.three }}>
+                  {[
+                    { label: 'Monthly Tuition',         note: 'R890 per subject / month', amount: 890, feeType: 'tuition' },
+                    { label: 'Psychological Assessment', note: 'Once-off fee',             amount: 250, feeType: 'registration' },
+                  ].map(fee => (
+                    <View key={fee.label} style={styles.feeRow}>
+                      <View style={styles.feeTop}>
+                        <View style={{ flex: 1 }}>
+                          <ThemedText style={styles.feeLabel}>{fee.label}</ThemedText>
+                          <ThemedText style={styles.feeNote}>{fee.note}</ThemedText>
+                        </View>
+                        <ThemedText style={styles.feeAmount}>R{fee.amount}</ThemedText>
                       </View>
-                      <ThemedText style={styles.feeAmount}>R{fee.amount}</ThemedText>
+                      <PayBtn
+                        style={styles.payBtn}
+                        activeOpacity={0.8}
+                        disabled={payingFee === fee.label}
+                        onPress={() => startPayment(selectedLearner, fee)}>
+                        <ThemedText style={styles.payBtnText}>
+                          {payingFee === fee.label ? 'Starting…' : 'Pay Now'}
+                        </ThemedText>
+                      </PayBtn>
                     </View>
-                    <PayBtn
-                      style={styles.payBtn}
-                      activeOpacity={0.8}
-                      onPress={() => {
-                        setSelectedLearner(null);
-                        router.push({
-                          pathname: '/payment-webview',
-                          params: {
-                            url:           `https://www.sabooksonline.co.za/demo/yoco?redirect=1&amount=${fee.amount}`,
-                            title:         fee.label,
-                            amount:        String(fee.amount),
-                            feeType:       fee.feeType,
-                            learnerId:     selectedLearner.id,
-                            guardianId:    user?.id ?? '',
-                            applicationId: app?.id ?? '',
-                          },
-                        } as any);
-                      }}>
-                      <ThemedText style={styles.payBtnText}>Pay Now</ThemedText>
-                    </PayBtn>
-                  </View>
-                ))}
-              </View>
+                  ))}
+                </View>
+              )}
 
               {isGuardian && (
                 <Pressable
@@ -1265,6 +1323,18 @@ const styles = StyleSheet.create({
   statusBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999 },
   statusText: { fontSize: 11, fontWeight: '600' },
 
+  paymentRowWithAction: {},
+  resumePayBtn: {
+    marginHorizontal: Spacing.three,
+    marginTop: -4,
+    marginBottom: 12,
+    backgroundColor: PRIMARY,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  resumePayBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+
   adminRow: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.two,
     paddingHorizontal: Spacing.three, paddingVertical: 14,
@@ -1279,6 +1349,8 @@ const styles = StyleSheet.create({
   contactIcon: { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   contactLabel: { fontSize: 14, fontWeight: '600', color: '#111827' },
   contactSub: { fontSize: 12, color: '#6B7280', marginTop: 1 },
+  notifStatusOn: { color: '#16A34A', fontWeight: '600' },
+  notifStatusOff: { color: '#D97706', fontWeight: '600' },
 
   signOutBtn: {
     marginHorizontal: Spacing.four, marginTop: Spacing.three,

@@ -41,12 +41,10 @@ export default function ForgotPasswordScreen() {
           <Ionicons name="arrow-back" size={22} color="#111827" />
         </Pressable>
 
-        <View style={styles.icon}>
-          <Ionicons name="lock-open-outline" size={36} color={PRIMARY} />
-        </View>
+        
         <ThemedText style={styles.title}>Forgot Password?</ThemedText>
         <ThemedText style={styles.sub}>
-          Enter your email and we'll send you a link to reset your password.
+          Enter your email and we&apos;ll send you a link to reset your password.
         </ThemedText>
 
         {sent ? (

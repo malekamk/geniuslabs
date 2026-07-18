@@ -1,11 +1,12 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
+import { LoadingDots } from '@/components/loading-dots';
 import { supabase } from '@/utils/supabase';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import type { Profile } from '@/types/db';
@@ -87,7 +88,7 @@ export default function AdminUsers() {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={PRIMARY} />
+        <LoadingDots style={{ marginTop: 40 }} />
       ) : users.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="people-outline" size={40} color="#D1D5DB" />

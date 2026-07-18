@@ -3,11 +3,12 @@ import * as DocumentPicker from 'expo-document-picker';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-  ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable,
+  Alert, KeyboardAvoidingView, Modal, Platform, Pressable,
   ScrollView, StyleSheet, TextInput, TouchableOpacity, View,
 } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { LoadingRow } from '@/components/loading-dots';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { ALL_GRADES, subjectsForGrade } from '@/constants/curriculum';
 import { useAuth } from '@/context/auth-context';
@@ -252,12 +253,14 @@ export default function CreateMaterialScreen() {
             style={[styles.publishBtn, saving && { opacity: 0.6 }]}
             onPress={handlePublish}
             disabled={saving}>
-            {saving
-              ? <ActivityIndicator size="small" color="#fff" />
-              : <Ionicons name="cloud-upload-outline" size={18} color="#fff" />}
-            <ThemedText style={styles.publishBtnText}>
-              {saving ? 'Publishing…' : 'Publish Material'}
-            </ThemedText>
+            {saving ? (
+              <LoadingRow label="Publishing…" color="#fff" textColor="#fff" />
+            ) : (
+              <>
+                <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
+                <ThemedText style={styles.publishBtnText}>Publish Material</ThemedText>
+              </>
+            )}
           </Pressable>
 
         </View>

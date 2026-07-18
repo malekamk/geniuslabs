@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { log } from './logger';
 
 type NotifyType = 'general' | 'announcement' | 'new_material' | 'class_reminder' | 'payment_due' | 'quiz_available';
 
@@ -16,12 +17,12 @@ export async function sendNotifications(
   const ids = Array.isArray(profileIds) ? profileIds : [profileIds];
   if (!ids.length) return;
 
-  console.log('[notify] sending to', ids.length, 'profiles:', ids);
+  log.info('Notify', `Sending to ${ids.length} profile(s)`, ids);
 
   const { data: result, error } = await supabase.functions.invoke('send-push', {
     body: { profileIds: ids, title, body, type, data: data ?? {} },
   });
 
-  if (error) console.error('[notify] invoke error:', error.message, error);
-  else console.log('[notify] edge fn response:', JSON.stringify(result));
+  if (error) log.error('Notify', 'Edge function invoke failed', error);
+  else log.ok('Notify', 'Edge function responded', result);
 }

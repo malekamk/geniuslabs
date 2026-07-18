@@ -3,10 +3,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { LoadingDots } from '@/components/loading-dots';
 import { useAuth } from '@/context/auth-context';
 
 const Tap = TouchableOpacity as any;
@@ -110,7 +111,7 @@ export default function AdminDashboard() {
       </View>
 
       {loading ? (
-        <View style={styles.loadingWrap}><ActivityIndicator color={PRIMARY} /></View>
+        <View style={styles.loadingWrap}><LoadingDots /></View>
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -178,7 +179,7 @@ export default function AdminDashboard() {
                   { label: 'Materials',      icon: 'book-outline',      color: '#1565C0', bg: '#EFF6FF', route: '/admin/materials' },
                   { label: 'Classes',        icon: 'videocam-outline',  color: '#7C3AED', bg: '#F5F3FF', route: '/admin/classes' },
                   { label: 'Gallery',        icon: 'images-outline',    color: '#059669', bg: '#F0FDF4', route: '/admin/gallery' },
-                  { label: 'Announcements',  icon: 'megaphone-outline',  color: '#D97706', bg: '#FFFBEB', route: '/admin/announcements' },
+                  { label: 'Announcements',  icon: 'megaphone-outline',  color: '#D97706', bg: '#FFFBEB', route: '/(tabs)/admin-announcements' },
                 ] as { label: string; icon: IoniconName; color: string; bg: string; route: string }[]).map(a => (
                   <Tap key={a.label} style={[styles.actionCard, { backgroundColor: a.bg }]}
                     onPress={() => router.push(a.route as any)}>

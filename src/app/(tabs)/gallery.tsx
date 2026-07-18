@@ -3,13 +3,14 @@ import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator, Dimensions, FlatList, Modal,
+  Dimensions, FlatList, Modal,
   Pressable, StyleSheet, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
+import { LoadingDots } from '@/components/loading-dots';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/utils/supabase';
@@ -58,7 +59,7 @@ export default function GalleryScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={PRIMARY} />
+        <LoadingDots style={{ marginTop: 40, alignSelf: 'center' }} />
       ) : items.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="images-outline" size={52} color="#D1D5DB" />
