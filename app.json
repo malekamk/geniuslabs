@@ -11,13 +11,15 @@
       "icon": "./assets/expo.icon",
       "supportsTablet": true,
       "bundleIdentifier": "com.emkaey.geniuslabs",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Genius Lab needs camera access for live classes and profile photos.",
         "NSMicrophoneUsageDescription": "Genius Lab needs microphone access for live classes.",
         "NSPhotoLibraryUsageDescription": "Genius Lab needs photo library access to upload documents and profile photos.",
         "NSPhotoLibraryAddUsageDescription": "Genius Lab needs to save images to your photo library.",
         "NSCalendarsUsageDescription": "Genius Lab needs calendar access to add class reminders.",
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": ["remote-notification"],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -40,7 +42,7 @@
         "android.permission.VIBRATE",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "com.google.android.c2dm.permission.RECEIVE"
-      ],
+      ]
     },
     "web": {
       "output": "static",
@@ -59,7 +61,12 @@
         }
       ],
       "expo-secure-store",
-      ["expo-document-picker", { "iCloudContainerEnvironment": "Production" }],
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ],
       [
         "expo-notifications",
         {
