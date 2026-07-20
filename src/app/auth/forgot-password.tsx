@@ -18,17 +18,18 @@ export default function ForgotPasswordScreen() {
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState(false);
 
+  // No redirectTo/link — Supabase's recovery email shows a 6-digit code
+  // (same OTP mechanism as signup verification) and reset-password.tsx
+  // collects it in-app. Avoids the geniuslabs:// deep-link problem entirely.
   async function handleReset() {
     if (!email.trim()) return Alert.alert('Required', 'Please enter your email address.');
+    const trimmedEmail = email.trim().toLowerCase();
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-      redirectTo: 'geniuslabs://auth/reset-password',
-    });
+    const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail);
     setLoading(false);
     if (error) return Alert.alert('Error', error.message);
-    setSent(true);
+    router.push({ pathname: '/auth/reset-password', params: { email: trimmedEmail } });
   }
 
   return (
@@ -41,49 +42,36 @@ export default function ForgotPasswordScreen() {
           <Ionicons name="arrow-back" size={22} color="#111827" />
         </Pressable>
 
-        
+
         <ThemedText style={styles.title}>Forgot Password?</ThemedText>
         <ThemedText style={styles.sub}>
-          Enter your email and we&apos;ll send you a link to reset your password.
+          Enter your email and we&apos;ll send you a 6-digit code to reset your password.
         </ThemedText>
 
-        {sent ? (
-          <View style={styles.successCard}>
-            <Ionicons name="checkmark-circle" size={32} color="#059669" />
-            <ThemedText style={styles.successTitle}>Check your inbox</ThemedText>
-            <ThemedText style={styles.successSub}>
-              A password reset link has been sent to {email.trim()}.
+        <View style={styles.card}>
+          <ThemedText style={styles.label}>Email address</ThemedText>
+          <View style={styles.inputWrap}>
+            <Ionicons name="mail-outline" size={18} color="#9CA3AF" style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="your@email.com"
+              placeholderTextColor="#9CA3AF"
+            />
+          </View>
+          <Pressable
+            style={[styles.btn, loading && { opacity: 0.6 }]}
+            onPress={handleReset}
+            disabled={loading}>
+            <ThemedText style={styles.btnText}>
+              {loading ? 'Sending…' : 'Send Code'}
             </ThemedText>
-            <Pressable style={styles.btn} onPress={() => router.replace('/auth/login')}>
-              <ThemedText style={styles.btnText}>Back to Sign In</ThemedText>
-            </Pressable>
-          </View>
-        ) : (
-          <View style={styles.card}>
-            <ThemedText style={styles.label}>Email address</ThemedText>
-            <View style={styles.inputWrap}>
-              <Ionicons name="mail-outline" size={18} color="#9CA3AF" style={{ marginRight: 8 }} />
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                placeholder="your@email.com"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
-            <Pressable
-              style={[styles.btn, loading && { opacity: 0.6 }]}
-              onPress={handleReset}
-              disabled={loading}>
-              <ThemedText style={styles.btnText}>
-                {loading ? 'Sending…' : 'Send Reset Link'}
-              </ThemedText>
-            </Pressable>
-          </View>
-        )}
+          </Pressable>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -92,11 +80,6 @@ export default function ForgotPasswordScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, paddingHorizontal: Spacing.four, gap: Spacing.three },
   backBtn: { alignSelf: 'flex-start', padding: 4 },
-  icon: {
-    width: 72, height: 72, borderRadius: 22,
-    backgroundColor: PRIMARY + '15', alignItems: 'center', justifyContent: 'center',
-    alignSelf: 'center', marginTop: Spacing.four,
-  },
   title: { fontSize: 26, fontWeight: '800', color: '#111827', textAlign: 'center' },
   sub: { fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 20 },
   card: {

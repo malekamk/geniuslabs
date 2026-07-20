@@ -209,7 +209,7 @@ export default function LoginScreen() {
         </View>
 
         {/* DEV QUICK LOGIN — dev builds only; never ships with real credentials in production */}
-        {/* {__DEV__ && (
+        {__DEV__ && (
           <View style={styles.demoPanel}>
             <View style={styles.demoDivider}>
               <View style={styles.demoDividerLine} />
@@ -227,7 +227,7 @@ export default function LoginScreen() {
               ))}
             </View>
           </View>
-        )} */}
+        )}
 
         {/* FOOTER */}
         <View style={styles.footer}>

@@ -16,6 +16,9 @@ const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+// Every JSON response (including errors) needs Content-Type set explicitly —
+// without it, clients can't reliably parse the body as JSON.
+const JSON_HEADERS = { ...CORS, 'Content-Type': 'application/json' };
 
 const SUCCESS_STATUSES = ['successful', 'completed', 'paid', 'succeeded'];
 const FAILED_STATUSES  = ['failed', 'cancelled', 'canceled', 'expired'];
@@ -29,44 +32,44 @@ serve(async (req) => {
     const ANON_KEY     = Deno.env.get('SUPABASE_ANON_KEY');
     const YOCO_SECRET_KEY = Deno.env.get('YOCO_SECRET_KEY');
     if (!SUPABASE_URL || !SERVICE_KEY || !ANON_KEY || !YOCO_SECRET_KEY) {
-      return new Response(JSON.stringify({ error: 'missing env vars' }), { status: 500, headers: CORS });
+      return new Response(JSON.stringify({ error: 'missing env vars' }), { status: 500, headers: JSON_HEADERS });
     }
 
     const authHeader = req.headers.get('Authorization') ?? '';
     const jwt = authHeader.replace(/^Bearer\s+/i, '');
-    if (!jwt) return new Response(JSON.stringify({ error: 'unauthenticated' }), { status: 401, headers: CORS });
+    if (!jwt) return new Response(JSON.stringify({ error: 'unauthenticated' }), { status: 401, headers: JSON_HEADERS });
 
     const authClient = createClient(SUPABASE_URL, ANON_KEY);
     const { data: userData, error: userErr } = await authClient.auth.getUser(jwt);
     if (userErr || !userData?.user) {
-      return new Response(JSON.stringify({ error: 'invalid session' }), { status: 401, headers: CORS });
+      return new Response(JSON.stringify({ error: 'invalid session' }), { status: 401, headers: JSON_HEADERS });
     }
     const guardianId = userData.user.id;
 
     const { paymentId } = await req.json();
-    if (!paymentId) return new Response(JSON.stringify({ error: 'paymentId required' }), { status: 400, headers: CORS });
+    if (!paymentId) return new Response(JSON.stringify({ error: 'paymentId required' }), { status: 400, headers: JSON_HEADERS });
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
     const { data: payment, error: payErr } = await admin
       .from('payments').select('id, status, gateway_reference, guardian_id')
       .eq('id', paymentId).eq('guardian_id', guardianId).maybeSingle();
     if (payErr || !payment) {
-      return new Response(JSON.stringify({ error: 'payment not found' }), { status: 404, headers: CORS });
+      return new Response(JSON.stringify({ error: 'payment not found' }), { status: 404, headers: JSON_HEADERS });
     }
 
     // Already settled (by a previous call, or the webhook if that's also wired up) — just report it.
     if (payment.status !== 'pending') {
-      return new Response(JSON.stringify({ status: payment.status }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ status: payment.status }), { headers: JSON_HEADERS });
     }
     if (!payment.gateway_reference) {
-      return new Response(JSON.stringify({ status: 'pending' }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ status: 'pending' }), { headers: JSON_HEADERS });
     }
 
     const checkRes = await fetch(`https://payments.yoco.com/api/checkouts/${payment.gateway_reference}`, {
       headers: { 'Authorization': `Bearer ${YOCO_SECRET_KEY}` },
     });
     if (!checkRes.ok) {
-      return new Response(JSON.stringify({ status: 'pending', error: 'could not reach yoco' }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ status: 'pending', error: 'could not reach yoco' }), { headers: JSON_HEADERS });
     }
     const checkout = await checkRes.json();
     const yocoStatus = String(checkout.status ?? '').toLowerCase();
@@ -83,9 +86,9 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ status: nextStatus ?? 'pending', yocoStatus }),
-      { headers: { ...CORS, 'Content-Type': 'application/json' } }
+      { headers: JSON_HEADERS }
     );
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: CORS });
+    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: JSON_HEADERS });
   }
 });

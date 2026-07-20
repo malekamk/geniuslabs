@@ -9,7 +9,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 export type OAuthProvider = 'google' | 'apple';
 
-async function createSessionFromUrl(url: string) {
+export async function createSessionFromUrl(url: string) {
   const { params, errorCode } = QueryParams.getQueryParams(url);
   if (errorCode) throw new Error(errorCode);
 

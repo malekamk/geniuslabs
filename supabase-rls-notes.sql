@@ -139,3 +139,108 @@ CREATE POLICY "User upserts own chat room read"
 CREATE POLICY "User updates own chat room read"
   ON chat_room_reads FOR UPDATE TO authenticated
   USING (profile_id = auth.uid());
+
+-- ============================================================
+-- Prevent privilege escalation via self-service profile writes
+-- (profiles.role must be settable only by the admin-create-user Edge
+-- Function, via the service_role key — never by a user's own session)
+--
+-- Run the verification query FIRST:
+--   SELECT policyname, cmd, qual, with_check FROM pg_policies WHERE tablename = 'profiles';
+-- Skip the final INSERT policy below if one already exists for profiles.
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.prevent_role_self_escalation()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+BEGIN
+  -- The admin-create-user Edge Function calls Postgres with the service
+  -- role key, which carries role='service_role' — the only caller allowed
+  -- to set profiles.role to 'tutor'/'admin'.
+  IF auth.role() = 'service_role' THEN RETURN NEW; END IF;
+
+  IF TG_OP = 'UPDATE' THEN
+    -- A normal self-service profile update (phone, subjects, grades, bio,
+    -- push_token, avatar_url, etc.) can never change an existing role —
+    -- silently pin it back so a benign upsert resending the same role
+    -- still succeeds.
+    IF NEW.role IS DISTINCT FROM OLD.role THEN
+      NEW.role := OLD.role;
+    END IF;
+  ELSIF TG_OP = 'INSERT' THEN
+    -- First-time self-service row creation (complete-profile.tsx's upsert,
+    -- if no row exists yet) may only ever create guardian/learner.
+    IF NEW.role NOT IN ('guardian', 'learner') THEN
+      RAISE EXCEPTION 'role % is not self-assignable', NEW.role;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END; $$;
+
+DROP TRIGGER IF EXISTS trg_prevent_role_self_escalation ON profiles;
+CREATE TRIGGER trg_prevent_role_self_escalation
+  BEFORE INSERT OR UPDATE ON profiles
+  FOR EACH ROW EXECUTE FUNCTION public.prevent_role_self_escalation();
+
+-- NOT applied — live check showed an existing "Own profile" ALL policy
+-- (qual/with_check: auth.uid() = id) already covers UPDATE and INSERT for
+-- a user's own row with correct ownership scoping. Editing/adding the two
+-- policies below would have been redundant (RLS policies are OR'd — the
+-- "Own profile" policy grants the same access independently either way).
+-- The trigger above is the actual fix; these are left here only so a
+-- future reader doesn't wonder why they're missing.
+--
+-- DROP POLICY IF EXISTS "User updates own profile" ON profiles;
+-- CREATE POLICY "User updates own profile" ON profiles FOR UPDATE
+--   TO authenticated USING (id = auth.uid()) WITH CHECK (id = auth.uid());
+--
+-- CREATE POLICY "User inserts own profile" ON profiles FOR INSERT
+--   TO authenticated WITH CHECK (id = auth.uid());
+
+-- ============================================================
+-- Guardian-invites-learner: replaces fragile name-matching linking
+-- (learner self-signup + link_learner_account RPC) with a deterministic,
+-- ID-based invite flow — see supabase/functions/guardian-invite-learner
+-- and src/app/(tabs)/profile.tsx. APPLIED.
+-- ============================================================
+
+-- Lets a guardian check invite/link status for their own learners without
+-- exposing auth.users directly to the client. Status derives from Auth's
+-- own last_sign_in_at — no second source of truth to keep in sync.
+CREATE OR REPLACE FUNCTION public.learner_invite_statuses(p_learner_ids uuid[])
+RETURNS TABLE(learner_id uuid, status text)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp AS $$
+BEGIN
+  RETURN QUERY
+  SELECT l.id,
+    CASE
+      WHEN l.profile_id IS NULL THEN 'not_invited'
+      WHEN u.last_sign_in_at IS NULL THEN 'invited_pending'
+      ELSE 'linked'
+    END
+  FROM public.learners l
+  LEFT JOIN auth.users u ON u.id = l.profile_id
+  WHERE l.id = ANY(p_learner_ids) AND l.guardian_id = auth.uid();
+END; $$;
+
+-- Cheap insurance against a double-invite race linking two different auth
+-- users to the same learner row.
+ALTER TABLE learners ADD CONSTRAINT learners_profile_id_key UNIQUE (profile_id);
+
+-- Run once both signup.tsx and complete-profile.tsx no longer call it:
+--   SELECT proname, pg_get_function_identity_arguments(oid) FROM pg_proc WHERE proname = 'link_learner_account';
+-- then drop with the exact signature returned above, e.g.:
+--   DROP FUNCTION IF EXISTS link_learner_account(text, text, uuid);
+
+-- Once no UI path self-assigns 'learner' either, tighten the INSERT branch
+-- of trg_prevent_role_self_escalation (defined earlier in this file) from
+-- `NEW.role NOT IN ('guardian', 'learner')` to `NEW.role <> 'guardian'`.
+-- APPLIED (both above are done).
+
+-- ============================================================
+-- Temp-password provisioning: replaces the email-invite-link flow for
+-- admin-create-user and guardian-invite-learner. No email link, no deep
+-- link, no redirect config to manage — the new user just signs in normally
+-- with a generated temp password, then is forced to set a real one via
+-- src/app/auth/set-password.tsx before reaching the rest of the app.
+-- ============================================================
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false;

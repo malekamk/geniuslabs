@@ -2,23 +2,25 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { LoadingDots } from '@/components/loading-dots';
 import { supabase } from '@/utils/supabase';
+import { useAuth } from '@/context/auth-context';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import type { Profile } from '@/types/db';
 
 const PRIMARY = '#1565C0';
 const BG = '#F5F6FA';
 
-type RoleFilter = 'learner' | 'tutor' | 'guardian';
+type RoleFilter = 'learner' | 'tutor' | 'guardian' | 'admin';
 const TABS: { key: RoleFilter; label: string; color: string }[] = [
   { key: 'learner',  label: 'Learners',  color: '#059669' },
   { key: 'tutor',    label: 'Tutors',    color: '#1565C0' },
   { key: 'guardian', label: 'Guardians', color: '#7C3AED' },
+  { key: 'admin',    label: 'Admins',    color: '#DC2626' },
 ];
 
 function initials(name: string | null) {
@@ -28,6 +30,7 @@ function initials(name: string | null) {
 
 export default function AdminUsers() {
   const insets = useSafeAreaInsets();
+  const { profile } = useAuth();
   const [tab, setTab] = useState<RoleFilter>('learner');
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,7 +48,11 @@ export default function AdminUsers() {
     setLoading(false);
   }
 
-  async function toggleActive(user: Profile) {
+  function toggleActive(user: Profile) {
+    if (user.id === profile?.id) {
+      Alert.alert('Not Allowed', "You can't deactivate your own account.");
+      return;
+    }
     const next = !user.is_active;
     Alert.alert(
       next ? 'Activate User' : 'Deactivate User',
@@ -64,6 +71,14 @@ export default function AdminUsers() {
     );
   }
 
+  function addStaff() {
+    Alert.alert('Add Staff', 'What would you like to add?', [
+      { text: 'Add Tutor', onPress: () => router.push({ pathname: '/admin/add-staff', params: { role: 'tutor' } }) },
+      { text: 'Add Admin', onPress: () => router.push({ pathname: '/admin/add-staff', params: { role: 'admin' } }) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
   const activeTab = TABS.find(t => t.key === tab)!;
   const paddingTop = insets.top + Spacing.three;
 
@@ -75,6 +90,9 @@ export default function AdminUsers() {
         <View style={[styles.countBadge, { backgroundColor: activeTab.color }]}>
           <ThemedText style={styles.countText}>{users.length}</ThemedText>
         </View>
+        <Pressable style={styles.addBtn} onPress={addStaff} hitSlop={10}>
+          <Ionicons name="add" size={22} color={PRIMARY} />
+        </Pressable>
       </View>
 
       {/* Role tabs */}
@@ -138,6 +156,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.four, paddingBottom: Spacing.two },
   title: { fontSize: 28, fontWeight: '800', color: '#111827' },
   countBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, alignSelf: 'center' },
+  addBtn: { marginLeft: 'auto', padding: 4 },
   countText: { fontSize: 12, fontWeight: '700', color: '#fff' },
   tabRow: { flexDirection: 'row', paddingHorizontal: Spacing.four, gap: Spacing.two, marginBottom: Spacing.two },
   tabPill: { flex: 1, paddingVertical: 9, borderRadius: 8, backgroundColor: '#fff', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },

@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 
@@ -96,9 +96,13 @@ export default function HomeScreen() {
       {/* ── TOP BAR ── */}
       <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
         <View style={styles.topLeft}>
-          <LinearGradient colors={[PRIMARY, PRIMARY_DARK]} style={styles.avatarCircle}>
-            <ThemedText style={styles.avatarText}>{initials(profile?.full_name ?? null)}</ThemedText>
-          </LinearGradient>
+          {profile?.avatar_url ? (
+            <Image source={{ uri: profile.avatar_url }} style={styles.avatarCircle} />
+          ) : (
+            <LinearGradient colors={[PRIMARY, PRIMARY_DARK]} style={styles.avatarCircle}>
+              <ThemedText style={styles.avatarText}>{initials(profile?.full_name ?? null)}</ThemedText>
+            </LinearGradient>
+          )}
           <View>
             <ThemedText style={styles.greetText}>{greeting()},</ThemedText>
             <ThemedText style={styles.nameText} numberOfLines={1}>

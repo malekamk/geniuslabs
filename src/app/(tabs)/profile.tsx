@@ -6,6 +6,7 @@ import { uploadToStorage } from '@/utils/upload';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  Image,
   Linking,
   Modal,
   Platform,
@@ -28,7 +29,7 @@ import { useAuth } from '@/context/auth-context';
 import { useClasses } from '@/context/classes-context';
 import { useNotifications } from '@/context/notification-context';
 import { useSupabaseQuery } from '@/hooks/use-supabase-query';
-import { supabase } from '@/utils/supabase';
+import { supabase, getFunctionErrorMessage } from '@/utils/supabase';
 import { log } from '@/utils/logger';
 import type { Learner, Payment, EnrolmentApplication, Profile as TutorProfile, QuizAttempt, UserMaterialProgress } from '@/types/db';
 
@@ -73,6 +74,12 @@ const APP_STATUS: Record<string, { label: string; bg: string; text: string }> = 
   reviewing: { label: 'Reviewing', bg: '#DBEAFE', text: '#1E40AF' },
   approved:  { label: 'Approved',  bg: '#D1FAE5', text: '#065F46' },
   rejected:  { label: 'Rejected',  bg: '#FEE2E2', text: '#991B1B' },
+};
+
+const INVITE_STATUS_CONFIG: Record<'not_invited' | 'invited_pending' | 'linked', { label: string; icon: any; color: string; bg: string }> = {
+  not_invited:     { label: 'Not yet invited',        icon: 'person-add-outline',   color: '#9CA3AF', bg: '#F3F4F6' },
+  invited_pending: { label: 'Invited — awaiting setup', icon: 'time-outline',        color: '#D97706', bg: '#FEF3C7' },
+  linked:          { label: 'Account linked',         icon: 'checkmark-circle',     color: '#059669', bg: '#D1FAE5' },
 };
 
 function initials(name: string | null | undefined, email: string | null | undefined): string {
@@ -126,6 +133,23 @@ export default function ProfileScreen() {
       filter: q => q.eq('guardian_id', user?.id ?? NULL_UUID),
     });
 
+  type InviteStatus = 'not_invited' | 'invited_pending' | 'linked';
+  const [inviteStatuses, setInviteStatuses] = useState<Record<string, InviteStatus>>({});
+  const learnerIdsKey = learners.map(l => l.id).join(',');
+
+  const refreshInviteStatuses = useCallback(async () => {
+    if (!learners.length) return;
+    const { data, error } = await supabase.rpc('learner_invite_statuses', {
+      p_learner_ids: learners.map(l => l.id),
+    });
+    if (error) { log.error('Profile', 'learner_invite_statuses failed', error); return; }
+    const next: Record<string, InviteStatus> = {};
+    for (const row of data ?? []) next[row.learner_id] = row.status;
+    setInviteStatuses(next);
+  }, [learnerIdsKey]);
+
+  useEffect(() => { refreshInviteStatuses(); }, [refreshInviteStatuses]);
+
   const { data: applications, refetch: refetchApps } =
     useSupabaseQuery<EnrolmentApplication>('enrolment_applications', {
       select: 'id, learner_name, subjects, status, submitted_at, birth_cert_url, school_report_url, additional_file_url',
@@ -164,6 +188,30 @@ export default function ProfileScreen() {
   const [selectedLearner, setSelectedLearner] = useState<Learner | null>(null);
   const [payingFee, setPayingFee] = useState<string | null>(null);
   const [resumingPaymentId, setResumingPaymentId] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [invitingLearnerId, setInvitingLearnerId] = useState<string | null>(null);
+
+  async function inviteLearner(learner: Learner) {
+    if (!inviteEmail.trim()) return Alert.alert('Required', "Enter the learner's email address.");
+    setInvitingLearnerId(learner.id);
+    const { data, error } = await supabase.functions.invoke('guardian-invite-learner', {
+      body: { learnerId: learner.id, email: inviteEmail.trim() },
+    });
+    setInvitingLearnerId(null);
+    if (error || data?.error) {
+      const message = await getFunctionErrorMessage(error, data);
+      log.error('Profile', 'guardian-invite-learner failed', { message });
+      Alert.alert('Error', message);
+      return;
+    }
+    setInviteEmail('');
+    setInviteStatuses(prev => ({ ...prev, [learner.id]: 'invited_pending' }));
+    const firstName = learner.full_name.split(' ')[0];
+    Alert.alert(
+      'Account Created',
+      `Temp password for ${firstName}:\n\n${data.tempPassword}\n\nShare this with them — they'll be asked to set their own password on first sign-in.`
+    );
+  }
 
   async function startPayment(learner: Learner, fee: { label: string; amount: number; feeType: string }) {
     setPayingFee(fee.label);
@@ -172,8 +220,9 @@ export default function ProfileScreen() {
     });
     setPayingFee(null);
     if (error || !data?.checkoutUrl) {
-      log.error('Payment', 'create-checkout failed', error ?? data);
-      Alert.alert('Error', 'Could not start payment. Please try again.');
+      const message = await getFunctionErrorMessage(error, data);
+      log.error('Payment', 'create-checkout failed', { message });
+      Alert.alert('Error', message);
       return;
     }
     setSelectedLearner(null);
@@ -190,8 +239,9 @@ export default function ProfileScreen() {
     });
     setResumingPaymentId(null);
     if (error || !data?.checkoutUrl) {
-      log.error('Payment', 'resume create-checkout failed', error ?? data);
-      Alert.alert('Error', 'Could not resume this payment. Please try again.');
+      const message = await getFunctionErrorMessage(error, data);
+      log.error('Payment', 'resume create-checkout failed', { message });
+      Alert.alert('Error', message);
       return;
     }
     router.push({
@@ -323,11 +373,15 @@ export default function ProfileScreen() {
 
         {/* ── IDENTITY CARD ── */}
         <LinearGradient colors={[PRIMARY, '#0D3B23']} style={styles.identityCard}>
-          <View style={styles.avatarCircle}>
-            <ThemedText style={styles.avatarText}>
-              {initials(profile?.full_name, user?.email)}
-            </ThemedText>
-          </View>
+          {profile?.avatar_url ? (
+            <Image source={{ uri: profile.avatar_url }} style={styles.avatarCircle} />
+          ) : (
+            <View style={styles.avatarCircle}>
+              <ThemedText style={styles.avatarText}>
+                {initials(profile?.full_name, user?.email)}
+              </ThemedText>
+            </View>
+          )}
           <View style={{ flex: 1 }}>
             <ThemedText style={styles.idName}>{profile?.full_name ?? 'No name set'}</ThemedText>
             <ThemedText style={styles.idEmail}>{user?.email}</ThemedText>
@@ -456,6 +510,8 @@ export default function ProfileScreen() {
                 learners.map(l => {
                   const app = applications.find(a => a.learner_name === l.full_name);
                   const statusCfg = APP_STATUS[app?.status ?? 'pending'];
+                  const inviteStatus = inviteStatuses[l.id];
+                  const inviteCfg = inviteStatus && INVITE_STATUS_CONFIG[inviteStatus];
                   return (
                     <Pressable
                       key={l.id}
@@ -472,6 +528,9 @@ export default function ProfileScreen() {
                         <View style={[styles.statusChip, { backgroundColor: statusCfg.bg }]}>
                           <ThemedText style={[styles.statusChipText, { color: statusCfg.text }]}>{statusCfg.label}</ThemedText>
                         </View>
+                      )}
+                      {inviteCfg && inviteStatus !== 'not_invited' && (
+                        <Ionicons name={inviteCfg.icon} size={16} color={inviteCfg.color} style={{ marginLeft: 6 }} />
                       )}
                       <Ionicons name="chevron-forward" size={16} color="#D1D5DB" style={{ marginLeft: 4 }} />
                     </Pressable>
@@ -721,6 +780,10 @@ export default function ProfileScreen() {
           <ThemedText style={styles.signOutText}>Sign Out</ThemedText>
         </Pressable>
 
+        <Pressable onPress={() => router.push('/privacy-policy' as any)} style={{ alignSelf: 'center', marginTop: Spacing.three }}>
+          <ThemedText style={styles.privacyLink}>Privacy Policy</ThemedText>
+        </Pressable>
+
         <ThemedText style={styles.version}>Ravhuyani Genius Lab · Limpopo</ThemedText>
 
       </View>
@@ -940,6 +1003,50 @@ export default function ProfileScreen() {
                 </View>
               )}
 
+              {/* ── ACCOUNT ACCESS (invite learner to their own login) ── */}
+              {isGuardian && (() => {
+                const inviteStatus = inviteStatuses[selectedLearner.id] ?? 'not_invited';
+                const inviteCfg = INVITE_STATUS_CONFIG[inviteStatus];
+                const isInviting = invitingLearnerId === selectedLearner.id;
+                return (
+                  <>
+                    <ThemedText style={styles.modalSectionLabel}>ACCOUNT ACCESS</ThemedText>
+                    <View style={styles.inviteCard}>
+                      <View style={[styles.inviteStatusPill, { backgroundColor: inviteCfg.bg }]}>
+                        <Ionicons name={inviteCfg.icon} size={14} color={inviteCfg.color} />
+                        <ThemedText style={[styles.inviteStatusText, { color: inviteCfg.color }]}>{inviteCfg.label}</ThemedText>
+                      </View>
+                      {inviteStatus !== 'linked' && (
+                        <>
+                          <TextInput
+                            style={styles.editInput}
+                            value={inviteEmail}
+                            onChangeText={setInviteEmail}
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            placeholder="learner@email.com"
+                            placeholderTextColor="#9CA3AF"
+                          />
+                          <Pressable
+                            style={[styles.inviteBtn, isInviting && { opacity: 0.6 }]}
+                            disabled={isInviting}
+                            onPress={() => inviteLearner(selectedLearner)}>
+                            {isInviting ? (
+                              <LoadingRow label="Sending…" color={PRIMARY} />
+                            ) : (
+                              <ThemedText style={styles.inviteBtnText}>
+                                {inviteStatus === 'invited_pending' ? 'Resend Invite' : `Invite ${selectedLearner.full_name.split(' ')[0]} to their own account`}
+                              </ThemedText>
+                            )}
+                          </Pressable>
+                        </>
+                      )}
+                    </View>
+                  </>
+                );
+              })()}
+
               {/* ── PAY FOR THIS LEARNER ── */}
               <ThemedText style={styles.modalSectionLabel}>MAKE A PAYMENT</ThemedText>
               {app && app.status !== 'approved' ? (
@@ -1109,11 +1216,11 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.one,
   },
   avatarCircle: {
-    width: 56, height: 56, borderRadius: 8,
+    width: 76, height: 76, borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { fontSize: 20, fontWeight: '800', color: '#fff' },
+  avatarText: { fontSize: 26, fontWeight: '800', color: '#fff' },
   idName: { fontSize: 16, fontWeight: '700', color: '#fff' },
   idEmail: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 1 },
   idRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
@@ -1188,6 +1295,20 @@ const styles = StyleSheet.create({
     borderRadius: 8, padding: Spacing.two + 4,
   },
   statusBannerText: { fontSize: 14, fontWeight: '700' },
+  inviteCard: {
+    backgroundColor: '#fff', borderRadius: 8, padding: Spacing.three, gap: Spacing.two,
+    borderWidth: 1, borderColor: '#F3F4F6', marginBottom: Spacing.three,
+  },
+  inviteStatusPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999,
+  },
+  inviteStatusText: { fontSize: 12, fontWeight: '700' },
+  inviteBtn: {
+    backgroundColor: PRIMARY + '12', borderRadius: 8,
+    paddingVertical: 12, alignItems: 'center',
+  },
+  inviteBtnText: { color: PRIMARY, fontSize: 14, fontWeight: '700' },
   detailCard: {
     backgroundColor: '#fff', borderRadius: 8,
     elevation: 1, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
@@ -1361,6 +1482,7 @@ const styles = StyleSheet.create({
   signOutText: { fontSize: 15, fontWeight: '700', color: '#EF4444' },
 
   version: { textAlign: 'center', fontSize: 11, color: '#D1D5DB', marginTop: Spacing.two },
+  privacyLink: { fontSize: 12, color: PRIMARY, fontWeight: '600' },
 
   feePrompt: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

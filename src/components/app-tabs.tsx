@@ -46,11 +46,11 @@ export default function AppTabs() {
       }}>
 
       {/* ── ADMIN TABS ── */}
-      <Tabs.Screen name="admin-dashboard"  options={isAdmin ? { title: 'Dashboard',   tabBarIcon: ico('grid-outline', 'grid') }                           : { href: null }} />
+      <Tabs.Screen name="admin-dashboard"  options={isAdmin ? { title: 'Dashboard',   tabBarIcon: ico('home-outline', 'home') }                           : { href: null }} />
       <Tabs.Screen name="admin-enrolments" options={isAdmin ? { title: 'Enrolments',  tabBarIcon: ico('document-text-outline', 'document-text') }         : { href: null }} />
       <Tabs.Screen name="admin-payments"   options={isAdmin ? { title: 'Payments',    tabBarIcon: ico('card-outline', 'card') }                            : { href: null }} />
       <Tabs.Screen name="admin-users"          options={isAdmin ? { title: 'Users',         tabBarIcon: ico('people-outline', 'people') }                           : { href: null }} />
-      <Tabs.Screen name="admin-announcements" options={isAdmin ? { title: 'Broadcast',     tabBarIcon: ico('megaphone-outline', 'megaphone') }                      : { href: null }} />
+      <Tabs.Screen name="admin-announcements" options={isAdmin ? { title: 'Broadcast',     tabBarIcon: ico('radio-outline', 'radio') }                      : { href: null }} />
 
       {/* ── REGULAR TABS ── */}
       <Tabs.Screen name="index"    options={!isAdmin ? { title: 'Home',       tabBarIcon: ico('home-outline', 'home') }                                    : { href: null }} />

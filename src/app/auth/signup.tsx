@@ -1,4 +1,4 @@
-﻿import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -24,14 +24,14 @@ import { signInWithProvider } from '@/utils/oauth';
 const PRIMARY = '#1565C0';
 const BG = '#F7F9F8';
 
-type Role = 'guardian' | 'learner' | 'tutor';
-
+// Guardian is the only self-service signup path — tutor/admin accounts are
+// created by an admin (see admin-create-user), and a learner who wants their
+// own login is invited by their guardian (see guardian-invite-learner).
+// Both invite flows deterministically link by ID, no name-matching involved.
 export default function SignupScreen() {
   const insets = useSafeAreaInsets();
-  const [role, setRole] = useState<Role>('guardian');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  const [guardianEmail, setGuardianEmail] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -43,7 +43,7 @@ export default function SignupScreen() {
     setOauthLoading(provider);
     try {
       await signInWithProvider(provider);
-      // navigation onward (incl. the one-time role picker for new users) handled by _layout.tsx
+      // navigation onward handled by _layout.tsx
     } catch (e: any) {
       log.error('Signup', `${provider} sign-in failed`, e);
       Alert.alert('Sign-in Failed', e?.message ?? 'Please try again.');
@@ -55,24 +55,18 @@ export default function SignupScreen() {
   async function handleSignup() {
     if (!fullName.trim()) return Alert.alert('Required', 'Please enter your full name.');
     if (!email.trim()) return Alert.alert('Required', 'Please enter your email.');
-    if (role === 'learner' && !guardianEmail.trim())
-      return Alert.alert('Required', "Please enter your parent/guardian's email.");
     if (password.length < 8) return Alert.alert('Weak password', 'Password must be at least 8 characters.');
     if (password !== confirm) return Alert.alert('Mismatch', 'Passwords do not match.');
 
     const trimmedEmail = email.trim().toLowerCase();
-    log.info('Signup', 'Creating account…', { email: trimmedEmail, role });
+    log.info('Signup', 'Creating account…', { email: trimmedEmail });
 
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({
       email: trimmedEmail,
       password,
       options: {
-        data: {
-          full_name: fullName.trim(),
-          role,
-          ...(role === 'guardian' ? { phone: phone.trim() } : {}),
-        },
+        data: { full_name: fullName.trim(), role: 'guardian', phone: phone.trim() },
       },
     });
 
@@ -83,9 +77,9 @@ export default function SignupScreen() {
       return;
     }
 
-    log.ok('Signup', 'Account created', { userId: data.user?.id, role });
+    log.ok('Signup', 'Account created', { userId: data.user?.id });
 
-    if (role === 'guardian' && phone.trim() && data.session) {
+    if (phone.trim() && data.session) {
       const { error: profileErr } = await supabase
         .from('profiles')
         .update({ phone: phone.trim() })
@@ -93,31 +87,13 @@ export default function SignupScreen() {
       if (profileErr) log.warn('Signup', 'Profile phone update failed', profileErr);
     }
 
-    if (role === 'learner' && data.user?.id) {
-      log.info('Signup', 'Linking learner account…');
-      const { data: linked, error: linkErr } = await supabase.rpc('link_learner_account', {
-        p_guardian_email: guardianEmail.trim().toLowerCase(),
-        p_learner_name:   fullName.trim(),
-        p_user_id:        data.user.id,
-      });
-      if (linkErr) {
-        log.warn('Signup', 'Learner link failed', linkErr);
-        Alert.alert(
-          'Account Created',
-          "We couldn't automatically link you to your enrolment. Contact us if your classes don't show up."
-        );
-      } else if (linked) {
-        log.ok('Signup', 'Learner linked to guardian account');
-      } else {
-        log.warn('Signup', 'No matching learner row found — guardian may not have enrolled them yet');
-        Alert.alert(
-          'Account Created',
-          "We couldn't find a matching enrolment for you yet. Ask your guardian to enrol you, then contact us to link your account."
-        );
-      }
-    }
-
     setLoading(false);
+
+    if (!data.session) {
+      // Email confirmation is required — Supabase emailed a 6-digit code.
+      router.push({ pathname: '/auth/verify-email', params: { email: trimmedEmail } });
+      return;
+    }
     // navigation handled by useEffect in _layout.tsx
   }
 
@@ -132,30 +108,8 @@ export default function SignupScreen() {
 
         {/* BRAND */}
         <View style={styles.brand}>
-          {/* <View style={styles.logoCircle}>
-            <Ionicons name="school" size={32} color="#fff" />
-          </View> */}
           <ThemedText style={styles.brandName}>Create Account</ThemedText>
-          <ThemedText style={styles.brandSub}>Who are you registering as?</ThemedText>
-        </View>
-
-        {/* ROLE SELECTOR */}
-        <View style={styles.roleRow}>
-          {([
-            { r: 'guardian', icon: 'people-outline',  label: 'Guardian' },
-            { r: 'learner',  icon: 'person-outline',  label: 'Learner' },
-            { r: 'tutor',    icon: 'school-outline',  label: 'Tutor' },
-          ] as { r: Role; icon: string; label: string }[]).map(({ r, icon, label }) => (
-            <Pressable
-              key={r}
-              style={[styles.rolePill, role === r && styles.rolePillActive]}
-              onPress={() => setRole(r)}>
-              <Ionicons name={icon as any} size={15} color={role === r ? '#fff' : '#6B7280'} />
-              <ThemedText style={[styles.rolePillText, role === r && styles.rolePillTextActive]}>
-                {label}
-              </ThemedText>
-            </Pressable>
-          ))}
+          <ThemedText style={styles.brandSub}>Sign up as a parent/guardian to enrol your learner</ThemedText>
         </View>
 
         {/* CARD */}
@@ -166,36 +120,21 @@ export default function SignupScreen() {
               style={styles.input}
               value={fullName}
               onChangeText={setFullName}
-              placeholder={role === 'guardian' ? 'e.g. kganya maleka' : 'Your full name as enrolled'}
+              placeholder="e.g. kganya maleka"
               placeholderTextColor="#9CA3AF"
             />
           </Field>
 
-          {role === 'guardian' || role === 'tutor' ? (
-            <Field label="Phone Number" icon="call-outline">
-              <TextInput
-                style={styles.input}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-                placeholder="e.g. 071 000 0000"
-                placeholderTextColor="#9CA3AF"
-              />
-            </Field>
-          ) : (
-            <Field label="Parent / Guardian Email" icon="people-outline">
-              <TextInput
-                style={styles.input}
-                value={guardianEmail}
-                onChangeText={setGuardianEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                placeholder="guardian@email.com"
-                placeholderTextColor="#9CA3AF"
-              />
-            </Field>
-          )}
+          {/* <Field label="Phone Number" icon="call-outline">
+            <TextInput
+              style={styles.input}
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+              placeholder="e.g. 071 000 0000"
+              placeholderTextColor="#9CA3AF"
+            />
+          </Field> */}
 
           <Field label="Your Email Address" icon="mail-outline">
             <TextInput
@@ -236,21 +175,12 @@ export default function SignupScreen() {
             />
           </Field>
 
-          {role === 'learner' && (
-            <View style={styles.note}>
-              <Ionicons name="information-circle-outline" size={14} color="#1565C0" />
-              <ThemedText style={[styles.noteText, { color: '#1E40AF' }]}>
-                Use the exact full name your guardian used when enrolling you.
-              </ThemedText>
-            </View>
-          )}
-
-          <View style={styles.note}>
+          {/* <View style={styles.note}>
             <Ionicons name="shield-checkmark-outline" size={14} color="#6B7280" />
             <ThemedText style={styles.noteText}>
               Your information is processed in accordance with POPIA and used solely for account management.
             </ThemedText>
-          </View>
+          </View> */}
 
           <Pressable
             style={[styles.submitBtn, loading && { opacity: 0.6 }]}
@@ -332,22 +262,8 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, paddingHorizontal: Spacing.four, paddingBottom: Spacing.six, gap: Spacing.three },
 
   brand: { alignItems: 'center', gap: Spacing.two, paddingVertical: Spacing.two },
-  logoCircle: {
-    width: 72, height: 72, borderRadius: 22,
-    backgroundColor: PRIMARY, alignItems: 'center', justifyContent: 'center',
-  },
   brandName: { fontSize: 24, fontWeight: '800', color: '#111827' },
-  brandSub: { fontSize: 13, color: '#6B7280' },
-
-  roleRow: { flexDirection: 'row', gap: Spacing.two },
-  rolePill: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    paddingVertical: 12, borderRadius: 8,
-    backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#E5E7EB',
-  },
-  rolePillActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
-  rolePillText: { fontSize: 13, fontWeight: '700', color: '#6B7280' },
-  rolePillTextActive: { color: '#fff' },
+  brandSub: { fontSize: 13, color: '#6B7280', textAlign: 'center' },
 
   card: {
     backgroundColor: '#fff', borderRadius: 8, padding: Spacing.four, gap: Spacing.three,

@@ -54,7 +54,18 @@ function RootNavigator() {
       return;
     }
 
-    if (inAuth) {
+    // Account was created with a temp password (admin-create-user /
+    // guardian-invite-learner) — force a real password before anything else.
+    if (profile.must_change_password) {
+      if (segments.join('/') !== 'auth/set-password') router.replace('/auth/set-password');
+      return;
+    }
+
+    // Recovery OTP (reset-password.tsx) establishes a session on step 1
+    // (verifyOtp) before the user has actually set a new password on step
+    // 2 — don't bounce them to tabs mid-flow the way a normal signed-in
+    // visit to /auth would.
+    if (inAuth && segments.join('/') !== 'auth/reset-password') {
       router.replace('/(tabs)');
       return;
     }
@@ -81,8 +92,11 @@ function RootNavigator() {
           <Stack.Screen name="onboarding"            options={{ headerShown: false }} />
           <Stack.Screen name="auth/login"            options={{ headerShown: false }} />
           <Stack.Screen name="auth/signup"           options={{ headerShown: false }} />
+          <Stack.Screen name="auth/verify-email"     options={{ headerShown: false }} />
           <Stack.Screen name="auth/forgot-password"  options={{ headerShown: false }} />
+          <Stack.Screen name="auth/reset-password"   options={{ headerShown: false }} />
           <Stack.Screen name="auth/complete-profile" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/set-password"     options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)"                options={{ headerShown: false }} />
           <Stack.Screen name="chat-room"             options={{ headerShown: false }} />
           <Stack.Screen name="notifications"         options={{ headerShown: false }} />
@@ -92,6 +106,7 @@ function RootNavigator() {
           <Stack.Screen name="admin/materials"       options={{ headerShown: false }} />
           <Stack.Screen name="admin/classes"         options={{ headerShown: false }} />
           <Stack.Screen name="admin/gallery"         options={{ headerShown: false }} />
+          <Stack.Screen name="admin/add-staff"       options={{ title: 'Add Staff', presentation: 'modal', headerBackTitle: 'Cancel' }} />
           <Stack.Screen name="enroll"                options={{ title: 'Learner Enrolment', headerBackTitle: 'Back' }} />
           <Stack.Screen name="live-class/[room]"     options={{ title: 'Online Classroom', headerBackTitle: 'Classes' }} />
           <Stack.Screen name="create-class"          options={{ title: 'Create Class', presentation: 'modal', headerBackTitle: 'Cancel' }} />

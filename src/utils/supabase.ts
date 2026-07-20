@@ -55,6 +55,26 @@ const SecureStoreAdapter = {
   },
 };
 
+// supabase-js's functions.invoke() does NOT surface an edge function's JSON
+// error body as error.message when the response is non-2xx — it just gives
+// a generic "Edge Function returned a non-2xx status code". The real
+// message (e.g. our functions' { error: '...' } bodies) is only reachable
+// via error.context (the raw Response). Use this everywhere instead of
+// `data?.error ?? error?.message` so the actual reason is ever visible.
+export async function getFunctionErrorMessage(error: any, data?: any): Promise<string> {
+  if (data?.error) return data.error;
+  if (!error) return 'Unknown error';
+  if (error.context && typeof error.context.json === 'function') {
+    try {
+      const body = await error.context.json();
+      if (body?.error) return body.error;
+    } catch {
+      // body wasn't JSON or was already consumed — fall through
+    }
+  }
+  return error.message ?? 'Unknown error';
+}
+
 export const supabase = createClient(
   process.env.EXPO_PUBLIC_SUPABASE_URL!,
   process.env.EXPO_PUBLIC_SUPABASE_KEY!,

@@ -38,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (s?.user) {
         log.ok(TAG, 'Session restored', { userId: s.user.id, email: s.user.email });
         setSession(s);
-        fetchProfile(s.user.id);
+        fetchProfile(s.user.id, s.user);
       } else {
         log.info(TAG, 'No existing session — user is logged out');
         setLoading(false);
@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       log.info(TAG, `Auth state changed: ${event}`, s?.user ? { userId: s.user.id } : {});
       setSession(s);
       if (s?.user) {
-        fetchProfile(s.user.id);
+        fetchProfile(s.user.id, s.user);
       } else {
         setRealProfile(null);
         setImpersonatedProfile(null);
@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  async function fetchProfile(userId: string) {
+  async function fetchProfile(userId: string, authUser?: User) {
     log.info(TAG, 'Fetching profile…', { userId });
     // maybeSingle (not single) — a brand-new OAuth user has no row yet, which
     // is an expected case, not an error worth logging in red.
@@ -78,12 +78,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       log.info(TAG, 'No profile row yet — new user needs to complete profile');
     }
 
-    setRealProfile(data as Profile | null);
+    const profileRow = data as Profile | null;
+
+    // Google sign-in puts a profile photo URL in user_metadata — pick it up
+    // once, so the avatar shows instead of initials without any manual step.
+    // Apple never provides one, so this stays a no-op for Apple/email users.
+    if (profileRow && !profileRow.avatar_url) {
+      const metaAvatar = (authUser?.user_metadata?.avatar_url as string | undefined)
+        ?? (authUser?.user_metadata?.picture as string | undefined);
+      if (metaAvatar) {
+        profileRow.avatar_url = metaAvatar;
+        supabase.from('profiles').update({ avatar_url: metaAvatar }).eq('id', userId)
+          .then(({ error: avatarErr }) => { if (avatarErr) log.warn(TAG, 'Avatar sync failed', avatarErr); });
+      }
+    }
+
+    setRealProfile(profileRow);
     setLoading(false);
   }
 
   async function refreshProfile() {
-    if (session?.user) await fetchProfile(session.user.id);
+    if (session?.user) await fetchProfile(session.user.id, session.user);
   }
 
   async function signOut() {

@@ -14,6 +14,9 @@ const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+// Every JSON response (including errors) needs Content-Type set explicitly —
+// without it, clients can't reliably parse the body as JSON.
+const JSON_HEADERS = { ...CORS, 'Content-Type': 'application/json' };
 
 const ALLOWED_FEE_TYPES = ['tuition', 'assessment', 'registration', 'material', 'other'];
 
@@ -27,18 +30,18 @@ serve(async (req) => {
     const YOCO_SECRET_KEY = Deno.env.get('YOCO_SECRET_KEY');
 
     if (!SUPABASE_URL || !SERVICE_KEY || !ANON_KEY || !YOCO_SECRET_KEY) {
-      return new Response(JSON.stringify({ error: 'missing env vars' }), { status: 500, headers: CORS });
+      return new Response(JSON.stringify({ error: 'missing env vars' }), { status: 500, headers: JSON_HEADERS });
     }
 
     // Identify the caller from their JWT — never trust a client-supplied guardianId.
     const authHeader = req.headers.get('Authorization') ?? '';
     const jwt = authHeader.replace(/^Bearer\s+/i, '');
-    if (!jwt) return new Response(JSON.stringify({ error: 'unauthenticated' }), { status: 401, headers: CORS });
+    if (!jwt) return new Response(JSON.stringify({ error: 'unauthenticated' }), { status: 401, headers: JSON_HEADERS });
 
     const authClient = createClient(SUPABASE_URL, ANON_KEY);
     const { data: userData, error: userErr } = await authClient.auth.getUser(jwt);
     if (userErr || !userData?.user) {
-      return new Response(JSON.stringify({ error: 'invalid session' }), { status: 401, headers: CORS });
+      return new Response(JSON.stringify({ error: 'invalid session' }), { status: 401, headers: JSON_HEADERS });
     }
     const guardianId = userData.user.id;
 
@@ -54,24 +57,24 @@ serve(async (req) => {
         .from('payments').select('id, amount, status')
         .eq('id', body.paymentId).eq('guardian_id', guardianId).maybeSingle();
       if (existingErr || !existing) {
-        return new Response(JSON.stringify({ error: 'payment not found' }), { status: 404, headers: CORS });
+        return new Response(JSON.stringify({ error: 'payment not found' }), { status: 404, headers: JSON_HEADERS });
       }
       if (existing.status !== 'pending') {
-        return new Response(JSON.stringify({ error: 'payment is not pending' }), { status: 409, headers: CORS });
+        return new Response(JSON.stringify({ error: 'payment is not pending' }), { status: 409, headers: JSON_HEADERS });
       }
       payment = existing;
     } else {
       const { learnerId, feeType, title, amount } = body;
       const amountRand = Number(amount);
       if (!learnerId || !ALLOWED_FEE_TYPES.includes(feeType) || !title || !Number.isFinite(amountRand) || amountRand <= 0) {
-        return new Response(JSON.stringify({ error: 'invalid request' }), { status: 400, headers: CORS });
+        return new Response(JSON.stringify({ error: 'invalid request' }), { status: 400, headers: JSON_HEADERS });
       }
 
       // Confirm this learner actually belongs to the caller — prevents paying against someone else's learner id.
       const { data: learner, error: learnerErr } = await admin
         .from('learners').select('id').eq('id', learnerId).eq('guardian_id', guardianId).maybeSingle();
       if (learnerErr || !learner) {
-        return new Response(JSON.stringify({ error: 'learner not found for this account' }), { status: 403, headers: CORS });
+        return new Response(JSON.stringify({ error: 'learner not found for this account' }), { status: 403, headers: JSON_HEADERS });
       }
 
       // Record the payment as pending BEFORE redirecting to checkout.
@@ -85,7 +88,7 @@ serve(async (req) => {
         description: title,
       }).select('id, amount').single();
       if (payErr || !inserted) {
-        return new Response(JSON.stringify({ error: 'could not create payment record' }), { status: 500, headers: CORS });
+        return new Response(JSON.stringify({ error: 'could not create payment record' }), { status: 500, headers: JSON_HEADERS });
       }
       payment = inserted;
     }
@@ -111,7 +114,7 @@ serve(async (req) => {
 
     if (!checkoutRes.ok) {
       const errText = await checkoutRes.text();
-      return new Response(JSON.stringify({ error: 'yoco checkout failed', detail: errText }), { status: 502, headers: CORS });
+      return new Response(JSON.stringify({ error: 'yoco checkout failed', detail: errText }), { status: 502, headers: JSON_HEADERS });
     }
 
     const checkout = await checkoutRes.json();
@@ -119,9 +122,9 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ checkoutUrl: checkout.redirectUrl, paymentId: payment.id }),
-      { headers: { ...CORS, 'Content-Type': 'application/json' } }
+      { headers: JSON_HEADERS }
     );
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: CORS });
+    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: JSON_HEADERS });
   }
 });
