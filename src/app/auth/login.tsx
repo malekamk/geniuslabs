@@ -5,6 +5,7 @@ import * as StoreReview from 'expo-store-review';
 import { useState } from 'react';
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -110,10 +111,11 @@ export default function LoginScreen() {
 
         {/* LOGO / BRAND */}
         <View style={styles.brand}>
-          {/* <View style={styles.logoCircle}>
-            <Ionicons name="school" size={32} color="#fff" />
-          </View> */}
-          <ThemedText style={styles.brandName}>Rhavuyani Genius Lab</ThemedText>
+          {/* <Image
+            source={require('@/assets/images/geniuslabs-logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          /> */}
           <ThemedText style={styles.brandSub}>Sign in to your account</ThemedText>
         </View>
 
@@ -209,7 +211,7 @@ export default function LoginScreen() {
         </View>
 
         {/* DEV QUICK LOGIN — dev builds only; never ships with real credentials in production */}
-        {__DEV__ && (
+        {/* {__DEV__ && (
           <View style={styles.demoPanel}>
             <View style={styles.demoDivider}>
               <View style={styles.demoDividerLine} />
@@ -227,7 +229,7 @@ export default function LoginScreen() {
               ))}
             </View>
           </View>
-        )}
+        )} */}
 
         {/* FOOTER */}
         <View style={styles.footer}>
@@ -255,12 +257,8 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, paddingHorizontal: Spacing.four, paddingBottom: Spacing.six, gap: Spacing.four },
 
   brand: { alignItems: 'center', gap: Spacing.two, paddingVertical: Spacing.three },
-  logoCircle: {
-    width: 72, height: 72, borderRadius: 8,
-    backgroundColor: PRIMARY, alignItems: 'center', justifyContent: 'center',
-  },
-  brandName: { fontSize: 26, fontWeight: '800', color: '#111827' },
-  brandSub: { fontSize: 14, color: '#6B7280' },
+  logo: { width: 150, height: 100 },
+  brandSub: { fontSize: 18, color: '#000' ,textAlign: 'center', fontWeight: '600'},
 
   card: {
     backgroundColor: '#fff', borderRadius: 8, padding: Spacing.four, gap: Spacing.three,

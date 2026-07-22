@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -108,6 +109,11 @@ export default function SignupScreen() {
 
         {/* BRAND */}
         <View style={styles.brand}>
+          {/* <Image
+            source={require('@/assets/images/geniuslabs-logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          /> */}
           <ThemedText style={styles.brandName}>Create Account</ThemedText>
           <ThemedText style={styles.brandSub}>Sign up as a parent/guardian to enrol your learner</ThemedText>
         </View>
@@ -262,6 +268,7 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, paddingHorizontal: Spacing.four, paddingBottom: Spacing.six, gap: Spacing.three },
 
   brand: { alignItems: 'center', gap: Spacing.two, paddingVertical: Spacing.two },
+  logo: { width: 150, height: 100 },
   brandName: { fontSize: 24, fontWeight: '800', color: '#111827' },
   brandSub: { fontSize: 13, color: '#6B7280', textAlign: 'center' },
 

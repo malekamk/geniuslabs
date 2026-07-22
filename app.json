@@ -4,11 +4,11 @@
     "slug": "geniuslabs",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/geniuslabs-icon.png",
     "scheme": "geniuslabs",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/geniuslabs-icon.png",
       "supportsTablet": true,
       "bundleIdentifier": "com.emkaey.geniuslabs",
       "usesAppleSignIn": true,
@@ -24,7 +24,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -46,7 +46,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/geniuslabs-logo.png"
     },
     "plugins": [
       "expo-router",
@@ -55,7 +55,7 @@
         {
           "backgroundColor": "#208AEF",
           "android": {
-            "image": "./assets/images/splash-icon.png",
+            "image": "./assets/images/geniuslabs-logo.png",
             "imageWidth": 76
           }
         }
@@ -70,7 +70,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/icon.png",
+          "icon": "./assets/images/geniuslabs-logo.png",
           "color": "#1565C0",
           "sounds": [],
           "mode": "production"
