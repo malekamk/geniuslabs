@@ -18,7 +18,9 @@
         "NSPhotoLibraryUsageDescription": "Genius Lab needs photo library access to upload documents and profile photos.",
         "NSPhotoLibraryAddUsageDescription": "Genius Lab needs to save images to your photo library.",
         "NSCalendarsUsageDescription": "Genius Lab needs calendar access to add class reminders.",
-        "UIBackgroundModes": ["remote-notification"],
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -75,7 +77,8 @@
           "sounds": [],
           "mode": "production"
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,
