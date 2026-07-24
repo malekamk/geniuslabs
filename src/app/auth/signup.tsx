@@ -3,7 +3,6 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   Alert,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -18,9 +17,12 @@ import { ThemedText } from '@/components/themed-text';
 import { GoogleIcon } from '@/components/google-icon';
 import { LoadingDots } from '@/components/loading-dots';
 import { Spacing } from '@/constants/theme';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from '@/utils/supabase';
 import { log } from '@/utils/logger';
-import { signInWithProvider } from '@/utils/oauth';
+import { signInWithProvider, signInWithAppleNative } from '@/utils/oauth';
+
+import SignupIllustration from '@/assets/illustrations/signup.svg';
 
 const PRIMARY = '#1565C0';
 const BG = '#F7F9F8';
@@ -47,6 +49,18 @@ export default function SignupScreen() {
       // navigation onward handled by _layout.tsx
     } catch (e: any) {
       log.error('Signup', `${provider} sign-in failed`, e);
+      Alert.alert('Sign-in Failed', e?.message ?? 'Please try again.');
+    } finally {
+      setOauthLoading(null);
+    }
+  }
+
+  async function handleAppleNative() {
+    setOauthLoading('apple');
+    try {
+      await signInWithAppleNative();
+    } catch (e: any) {
+      log.error('Signup', 'Apple native sign-in failed', e);
       Alert.alert('Sign-in Failed', e?.message ?? 'Please try again.');
     } finally {
       setOauthLoading(null);
@@ -109,11 +123,7 @@ export default function SignupScreen() {
 
         {/* BRAND */}
         <View style={styles.brand}>
-          {/* <Image
-            source={require('@/assets/images/geniuslabs-logo.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          /> */}
+          <SignupIllustration width={160} height={160} />
           <ThemedText style={styles.brandName}>Create Account</ThemedText>
           <ThemedText style={styles.brandSub}>Sign up as a parent/guardian to enrol your learner</ThemedText>
         </View>
@@ -181,12 +191,16 @@ export default function SignupScreen() {
             />
           </Field>
 
-          {/* <View style={styles.note}>
+          <View style={styles.note}>
             <Ionicons name="shield-checkmark-outline" size={14} color="#6B7280" />
             <ThemedText style={styles.noteText}>
-              Your information is processed in accordance with POPIA and used solely for account management.
+              By continuing you agree to our{' '}
+              <ThemedText style={styles.notePrivacyLink} onPress={() => router.push('/privacy-policy' as any)}>
+                Privacy Policy
+              </ThemedText>
+              . Your information is processed in accordance with POPIA.
             </ThemedText>
-          </View> */}
+          </View>
 
           <Pressable
             style={[styles.submitBtn, loading && { opacity: 0.6 }]}
@@ -219,19 +233,19 @@ export default function SignupScreen() {
             </Pressable>
 
             {Platform.OS === 'ios' && (
-              <Pressable
-                style={[styles.oauthBtn, styles.appleBtn, oauthLoading === 'apple' && { opacity: 0.6 }]}
-                disabled={!!oauthLoading}
-                onPress={() => handleOAuth('apple')}>
-                {oauthLoading === 'apple' ? (
+              oauthLoading === 'apple' ? (
+                <View style={[styles.oauthBtn, styles.appleBtn]}>
                   <LoadingDots color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="logo-apple" size={20} color="#fff" />
-                    <ThemedText style={[styles.oauthBtnText, { color: '#fff' }]}>Continue with Apple</ThemedText>
-                  </>
-                )}
-              </Pressable>
+                </View>
+              ) : (
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                  cornerRadius={8}
+                  style={styles.appleNativeBtn}
+                  onPress={handleAppleNative}
+                />
+              )
             )}
           </View>
         </View>
@@ -268,7 +282,6 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, paddingHorizontal: Spacing.four, paddingBottom: Spacing.six, gap: Spacing.three },
 
   brand: { alignItems: 'center', gap: Spacing.two, paddingVertical: Spacing.two },
-  logo: { width: 150, height: 100 },
   brandName: { fontSize: 24, fontWeight: '800', color: '#111827' },
   brandSub: { fontSize: 13, color: '#6B7280', textAlign: 'center' },
 
@@ -292,6 +305,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB', borderRadius: 8, padding: Spacing.two,
   },
   noteText: { flex: 1, fontSize: 11, color: '#6B7280', lineHeight: 17 },
+  notePrivacyLink: { fontSize: 11, fontWeight: '700', color: PRIMARY },
 
   submitBtn: {
     backgroundColor: PRIMARY, paddingVertical: Spacing.three,
@@ -310,6 +324,7 @@ const styles = StyleSheet.create({
   },
   oauthBtnText: { fontSize: 15, fontWeight: '600', color: '#111827' },
   appleBtn: { backgroundColor: '#000', borderColor: '#000' },
+  appleNativeBtn: { height: 48, width: '100%' },
 
   footer: { flexDirection: 'row', justifyContent: 'center', gap: 6 },
   footerText: { fontSize: 13, color: '#6B7280' },

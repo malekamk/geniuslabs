@@ -1,5 +1,6 @@
 import { makeRedirectUri } from 'expo-auth-session';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import { supabase } from './supabase';
 import { log } from './logger';
@@ -46,4 +47,39 @@ export async function signInWithProvider(provider: OAuthProvider) {
   const session = await createSessionFromUrl(res.url);
   if (session) log.ok('OAuth', `${provider} sign-in successful`, { userId: session.user.id });
   return session;
+}
+
+/**
+ * Native "Sign in with Apple" via expo-apple-authentication — Apple requires
+ * this native flow (their own button + AuthenticationServices sheet) rather
+ * than a generic web-OAuth browser tab for guideline 4.8 compliance.
+ * Returns null if the user cancelled.
+ */
+export async function signInWithAppleNative() {
+  let credential;
+  try {
+    credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+    });
+  } catch (e: any) {
+    if (e?.code === 'ERR_REQUEST_CANCELED') {
+      log.info('OAuth', 'Apple native sign-in cancelled');
+      return null;
+    }
+    throw e;
+  }
+
+  if (!credential.identityToken) throw new Error('Apple did not return an identity token.');
+
+  const { data, error } = await supabase.auth.signInWithIdToken({
+    provider: 'apple',
+    token: credential.identityToken,
+  });
+  if (error) throw error;
+
+  log.ok('OAuth', 'Apple native sign-in successful', { userId: data.session?.user.id });
+  return data.session;
 }

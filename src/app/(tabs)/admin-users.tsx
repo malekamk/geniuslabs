@@ -1,16 +1,21 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Alert, FlatList, Image, Modal, Pressable, StyleSheet, Switch, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { LoadingDots } from '@/components/loading-dots';
-import { supabase } from '@/utils/supabase';
+import { EmptyState } from '@/components/empty-state';
+import { supabase, getFunctionErrorMessage } from '@/utils/supabase';
+import { log } from '@/utils/logger';
 import { useAuth } from '@/context/auth-context';
+import { useTopInset } from '@/hooks/use-top-inset';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import type { Profile } from '@/types/db';
+
+import TeamIllustration from '@/assets/illustrations/team.svg';
 
 const PRIMARY = '#1565C0';
 const BG = '#F5F6FA';
@@ -30,10 +35,13 @@ function initials(name: string | null) {
 
 export default function AdminUsers() {
   const insets = useSafeAreaInsets();
-  const { profile } = useAuth();
+  const topInset = useTopInset();
+  const { profile, loginAs } = useAuth();
   const [tab, setTab] = useState<RoleFilter>('learner');
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [promotingId, setPromotingId] = useState<string | null>(null);
+  const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
 
   useFocusEffect(useCallback(() => { fetchUsers(); }, [tab]));
 
@@ -71,6 +79,51 @@ export default function AdminUsers() {
     );
   }
 
+  function loginAsUser(user: Profile) {
+    Alert.alert(
+      'Login As',
+      `View the app as ${user.full_name ?? 'this user'}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Login As',
+          onPress: () => {
+            loginAs(user);
+            router.replace('/(tabs)');
+          },
+        },
+      ]
+    );
+  }
+
+  function promoteToAdmin(user: Profile) {
+    Alert.alert(
+      'Make Admin',
+      `Give ${user.full_name ?? 'this user'} full admin access? This can't be undone from here.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Make Admin',
+          onPress: async () => {
+            setPromotingId(user.id);
+            const { data, error } = await supabase.functions.invoke('set-user-role', {
+              body: { userId: user.id, role: 'admin' },
+            });
+            setPromotingId(null);
+            if (error || data?.error) {
+              const message = await getFunctionErrorMessage(error, data);
+              log.error('AdminUsers', 'set-user-role failed', { message });
+              Alert.alert('Error', message);
+              return;
+            }
+            log.ok('AdminUsers', 'Promoted to admin', { userId: user.id });
+            setUsers(prev => prev.filter(u => u.id !== user.id));
+          },
+        },
+      ]
+    );
+  }
+
   function addStaff() {
     Alert.alert('Add Staff', 'What would you like to add?', [
       { text: 'Add Tutor', onPress: () => router.push({ pathname: '/admin/add-staff', params: { role: 'tutor' } }) },
@@ -80,7 +133,7 @@ export default function AdminUsers() {
   }
 
   const activeTab = TABS.find(t => t.key === tab)!;
-  const paddingTop = insets.top + Spacing.three;
+  const paddingTop = topInset + Spacing.three;
 
   return (
     <View style={[styles.root, { paddingTop }]}>
@@ -109,8 +162,7 @@ export default function AdminUsers() {
         <LoadingDots style={{ marginTop: 40 }} />
       ) : users.length === 0 ? (
         <View style={styles.empty}>
-          <Ionicons name="people-outline" size={40} color="#D1D5DB" />
-          <ThemedText style={styles.emptyText}>No {tab}s yet</ThemedText>
+          <EmptyState illustration={TeamIllustration} title={`No ${tab}s yet`} sub="They'll show up here once added." />
         </View>
       ) : (
         <FlatList
@@ -119,14 +171,23 @@ export default function AdminUsers() {
           contentContainerStyle={{ paddingHorizontal: Spacing.four, paddingBottom: insets.bottom + BottomTabInset + Spacing.three, paddingTop: 4 }}
           ItemSeparatorComponent={() => <View style={{ height: Spacing.two }} />}
           renderItem={({ item }) => (
-            <View style={[styles.card, !item.is_active && styles.cardInactive]}>
-              <View style={[styles.avatar, { backgroundColor: activeTab.color + '20' }]}>
-                <ThemedText style={[styles.avatarText, { color: activeTab.color }]}>
-                  {initials(item.full_name)}
-                </ThemedText>
-              </View>
+            <Pressable
+              style={[styles.card, !item.is_active && styles.cardInactive]}
+              onPress={() => setSelectedUser(item)}>
+              {item.avatar_url ? (
+                <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, { backgroundColor: activeTab.color + '20' }]}>
+                  <ThemedText style={[styles.avatarText, { color: activeTab.color }]}>
+                    {initials(item.full_name)}
+                  </ThemedText>
+                </View>
+              )}
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.name} numberOfLines={1}>{item.full_name ?? '—'}</ThemedText>
+                {item.email && (
+                  <ThemedText style={styles.sub} numberOfLines={1}>{item.email}</ThemedText>
+                )}
                 {item.role === 'tutor' && item.subjects && item.subjects.length > 0 && (
                   <ThemedText style={styles.sub} numberOfLines={1}>{item.subjects.join(' · ')}</ThemedText>
                 )}
@@ -143,10 +204,63 @@ export default function AdminUsers() {
                 trackColor={{ false: '#D1D5DB', true: activeTab.color + '80' }}
                 thumbColor={item.is_active ? activeTab.color : '#9CA3AF'}
               />
-            </View>
+            </Pressable>
           )}
         />
       )}
+
+      <Modal
+        visible={!!selectedUser}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedUser(null)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setSelectedUser(null)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            {selectedUser && (
+              <>
+                {selectedUser.avatar_url ? (
+                  <Image source={{ uri: selectedUser.avatar_url }} style={styles.modalAvatar} />
+                ) : (
+                  <View style={[styles.modalAvatar, { backgroundColor: activeTab.color + '20' }]}>
+                    <ThemedText style={[styles.modalAvatarText, { color: activeTab.color }]}>
+                      {initials(selectedUser.full_name)}
+                    </ThemedText>
+                  </View>
+                )}
+                <ThemedText style={styles.modalName} numberOfLines={1}>{selectedUser.full_name ?? '—'}</ThemedText>
+                {selectedUser.email && (
+                  <ThemedText style={styles.modalEmail} numberOfLines={1}>{selectedUser.email}</ThemedText>
+                )}
+                <View style={styles.modalActions}>
+                  {selectedUser.id !== profile?.id && (
+                    <Pressable
+                      style={styles.modalBtn}
+                      onPress={() => { const u = selectedUser; setSelectedUser(null); loginAsUser(u); }}>
+                      <Ionicons name="log-in-outline" size={16} color="#fff" />
+                      <ThemedText style={styles.modalBtnText}>Login As</ThemedText>
+                    </Pressable>
+                  )}
+                  {tab !== 'admin' && (
+                    <Pressable
+                      style={styles.modalBtn}
+                      disabled={promotingId === selectedUser.id}
+                      onPress={() => { const u = selectedUser; setSelectedUser(null); promoteToAdmin(u); }}>
+                      {promotingId === selectedUser.id ? (
+                        <LoadingDots size={5} color="#fff" />
+                      ) : (
+                        <>
+                          {/* <Ionicons name="shield-checkmark-outline" size={16} color="#fff" /> */}
+                          <ThemedText style={styles.modalBtnText}>Make Admin</ThemedText>
+                        </>
+                      )}
+                    </Pressable>
+                  )}
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -163,7 +277,6 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 13, fontWeight: '700', color: '#6B7280' },
   tabTextActive: { color: '#fff' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
-  emptyText: { fontSize: 15, color: '#9CA3AF' },
   card: { backgroundColor: '#fff', borderRadius: 8, padding: Spacing.three, flexDirection: 'row', alignItems: 'center', gap: 14, elevation: 1, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } },
   cardInactive: { opacity: 0.5 },
   avatar: { width: 48, height: 48, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
@@ -172,4 +285,23 @@ const styles = StyleSheet.create({
   sub: { fontSize: 12, color: '#6B7280', marginTop: 2 },
   sub2: { fontSize: 11, color: '#9CA3AF' },
   joined: { fontSize: 11, color: '#9CA3AF', marginTop: 2 },
+  modalBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: Spacing.four,
+  },
+  modalCard: {
+    width: '100%', maxWidth: 350, backgroundColor: '#fff', borderRadius: 20,
+    paddingVertical: Spacing.four, paddingHorizontal: Spacing.four, alignItems: 'center',
+  },
+  modalAvatar: {
+    width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center', marginBottom: Spacing.three,
+  },
+  modalAvatarText: { fontSize: 32, fontWeight: '800' },
+  modalName: { fontSize: 18, fontWeight: '800', color: '#111827', maxWidth: '100%' },
+  modalEmail: { fontSize: 13, color: '#6B7280', marginTop: 4, maxWidth: '100%' },
+  modalActions: { flexDirection: 'row', gap: 10, marginTop: Spacing.four, width: '100%' },
+  modalBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: '#000', borderRadius: 10, paddingVertical: 12,
+  },
+  modalBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
 });

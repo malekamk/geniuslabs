@@ -10,6 +10,11 @@ export type ThemedTextProps = TextProps & {
 
 export function ThemedText({ style, type = 'default', themeColor, ...rest }: ThemedTextProps) {
   const theme = useTheme();
+  // A custom `style` overriding fontSize without also overriding lineHeight
+  // leaves the type's own (smaller) lineHeight in place, clipping the top of
+  // the glyphs — e.g. a 32px stat figure rendered inside a lineHeight:24 box.
+  const flat = StyleSheet.flatten(style) as { fontSize?: number; lineHeight?: number } | undefined;
+  const clearLineHeight = !!flat?.fontSize && flat.lineHeight == null;
 
   return (
     <Text
@@ -23,6 +28,7 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
         type === 'link' && styles.link,
         type === 'linkPrimary' && styles.linkPrimary,
         type === 'code' && styles.code,
+        clearLineHeight && { lineHeight: undefined },
         style,
       ]}
       {...rest}

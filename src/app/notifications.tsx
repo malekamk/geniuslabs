@@ -7,11 +7,14 @@ import { StatusBar } from 'expo-status-bar';
 
 import { ThemedText } from '@/components/themed-text';
 import { LoadingDots } from '@/components/loading-dots';
+import { EmptyState } from '@/components/empty-state';
 import { useAuth } from '@/context/auth-context';
 import { useNotifications } from '@/context/notification-context';
 import { supabase } from '@/utils/supabase';
 import type { Notification, NotificationType, Announcement } from '@/types/db';
 import { Spacing } from '@/constants/theme';
+
+import NotificationsIllustration from '@/assets/illustrations/notifications.svg';
 
 const PRIMARY = '#1565C0';
 const BG = '#F7F9F8';
@@ -123,9 +126,7 @@ export default function NotificationsScreen() {
           ListEmptyComponent={
             announcements.length === 0 ? (
               <View style={styles.empty}>
-                <Ionicons name="notifications-off-outline" size={48} color="#D1D5DB" />
-                <ThemedText style={styles.emptyText}>All caught up</ThemedText>
-                <ThemedText style={styles.emptySub}>No notifications yet.</ThemedText>
+                <EmptyState illustration={NotificationsIllustration} title="All caught up" sub="No notifications yet." />
               </View>
             ) : null
           }
@@ -198,8 +199,6 @@ const styles = StyleSheet.create({
   backBtn: { padding: 4 },
   title: { fontSize: 18, fontWeight: '800', color: '#111827' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
-  emptyText: { fontSize: 17, fontWeight: '700', color: '#374151' },
-  emptySub: { fontSize: 13, color: '#9CA3AF' },
   row: {
     flexDirection: 'row', alignItems: 'flex-start',
     backgroundColor: '#fff', marginHorizontal: Spacing.four, marginTop: Spacing.two,

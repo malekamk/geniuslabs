@@ -73,7 +73,7 @@ export function LoadingRow({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  rowWithText: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  rowWithText: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
   text: { fontSize: 13 },
 });

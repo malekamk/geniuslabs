@@ -7,9 +7,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { LoadingDots } from '@/components/loading-dots';
+import { EmptyState } from '@/components/empty-state';
 import { supabase } from '@/utils/supabase';
+import { useTopInset } from '@/hooks/use-top-inset';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import type { EnrolmentApplication } from '@/types/db';
+
+import DocumentsIllustration from '@/assets/illustrations/documents.svg';
 
 const PRIMARY = '#1565C0';
 const BG = '#F5F6FA';
@@ -32,6 +36,7 @@ const STATUS: Record<string, { bg: string; text: string }> = {
 
 export default function AdminEnrolments() {
   const insets = useSafeAreaInsets();
+  const topInset = useTopInset();
   const [filter, setFilter] = useState<Filter>('all');
   const [apps, setApps] = useState<EnrolmentApplication[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +57,7 @@ export default function AdminEnrolments() {
 
   useFocusEffect(useCallback(() => { fetchApps(); }, [filter]));
 
-  const paddingTop = insets.top + Spacing.three;
+  const paddingTop = topInset + Spacing.three;
 
   return (
     <View style={[styles.root, { paddingTop }]}>
@@ -80,8 +85,7 @@ export default function AdminEnrolments() {
         <LoadingDots style={{ marginTop: 40 }} />
       ) : apps.length === 0 ? (
         <View style={styles.empty}>
-          <Ionicons name="document-text-outline" size={40} color="#D1D5DB" />
-          <ThemedText style={styles.emptyText}>No {filter === 'all' ? '' : filter} applications</ThemedText>
+          <EmptyState illustration={DocumentsIllustration} title={`No ${filter === 'all' ? '' : filter + ' '}applications`} sub="Enrolment applications will show up here." />
         </View>
       ) : (
         <FlatList
@@ -134,7 +138,6 @@ const styles = StyleSheet.create({
   filterText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
   filterTextActive: { color: '#fff' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
-  emptyText: { fontSize: 15, color: '#9CA3AF' },
   card: { backgroundColor: '#fff', borderRadius: 8, padding: Spacing.three, gap: Spacing.two, elevation: 1, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: { width: 44, height: 44, borderRadius: 8, backgroundColor: PRIMARY + '18', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },

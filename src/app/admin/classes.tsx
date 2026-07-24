@@ -8,8 +8,11 @@ import { useFocusEffect } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { LoadingDots } from '@/components/loading-dots';
+import { EmptyState } from '@/components/empty-state';
 import { supabase } from '@/utils/supabase';
 import { Spacing } from '@/constants/theme';
+
+import ScheduleIllustration from '@/assets/illustrations/schedule.svg';
 
 const PRIMARY = '#1565C0';
 const BG = '#F5F6FA';
@@ -97,8 +100,7 @@ export default function AdminClasses() {
           ItemSeparatorComponent={() => <View style={{ height: Spacing.two }} />}
           ListEmptyComponent={
             <View style={s.empty}>
-              <Ionicons name="videocam-outline" size={40} color="#D1D5DB" />
-              <ThemedText style={s.emptyText}>No classes yet</ThemedText>
+              <EmptyState illustration={ScheduleIllustration} title="No classes yet" sub="Classes you create will show up here." />
             </View>
           }
           renderItem={({ item }) => {
@@ -159,7 +161,6 @@ const s = StyleSheet.create({
 
   list: { paddingHorizontal: Spacing.four, paddingBottom: 40 },
   empty: { paddingTop: 60, alignItems: 'center', gap: 8 },
-  emptyText: { fontSize: 15, color: '#9CA3AF' },
 
   card: {
     backgroundColor: '#fff', borderRadius: 8, padding: Spacing.three, gap: Spacing.two,

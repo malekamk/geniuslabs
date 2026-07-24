@@ -1,42 +1,31 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
-import { ONBOARDING_KEY } from './onboarding';
-
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { BrandedLoadingScreen } from '@/components/animated-icon';
 import { ErrorBoundary } from '@/components/error-boundary';
+import { LearnerBanner } from '@/components/learner-banner';
+import { OfflineBanner } from '@/components/offline-banner';
 import { AuthProvider, useAuth } from '@/context/auth-context';
 import { ClassesProvider } from '@/context/classes-context';
+import { NetworkProvider } from '@/context/network-context';
 import { NotificationProvider } from '@/context/notification-context';
 
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 function RootNavigator() {
-  const { session, profile, loading } = useAuth();
+  const { session, profile, loading, isImpersonating } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const colorScheme = useColorScheme();
 
-  // Read onboarding flag ONCE on mount — never re-read on navigation
-  const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
   useEffect(() => {
-    AsyncStorage.getItem(ONBOARDING_KEY).then(val => setOnboardingDone(val === 'true'));
-  }, []);
-
-  useEffect(() => {
-    // Wait until auth AND onboarding storage are both resolved
-    if (loading || onboardingDone === null) return;
+    if (loading) return;
 
     const seg0 = segments[0] as string | undefined;
-
-    // Onboarding disabled
-    // if (!onboardingDone) {
-    //   if (seg0 !== 'onboarding') router.replace('/onboarding');
-    //   return;
-    // }
-
     const inAuth = seg0 === 'auth';
 
     if (!session) {
@@ -66,6 +55,13 @@ function RootNavigator() {
     // 2 — don't bounce them to tabs mid-flow the way a normal signed-in
     // visit to /auth would.
     if (inAuth && segments.join('/') !== 'auth/reset-password') {
+      // Bare '/(tabs)' path — the SAME landing route for every role. It
+      // always resolves to this group's own index.tsx, whose content itself
+      // branches on role (admin dashboard vs learner/tutor/guardian home).
+      // There is exactly one NativeTabs tree in the whole app; never jump
+      // straight into a specific named tab, since that forces the native
+      // tab bar to re-target itself right after mounting instead of just
+      // opening on tab 0 — that's what previously left taps dead.
       router.replace('/(tabs)');
       return;
     }
@@ -77,19 +73,25 @@ function RootNavigator() {
     if (isAdminRoute && profile.role !== 'admin') {
       router.replace('/(tabs)');
     }
-  }, [session, profile, loading, onboardingDone, segments]);
+  }, [session, profile, loading, segments]);
 
-  // Render nothing until auth resolves (prevents the flash of wrong screen)
-  if (loading || onboardingDone === null) return null;
+  // Hand off from the native splash to the branded JS loader as soon as this
+  // component paints its first frame — must not wait on `loading` itself,
+  // since BrandedLoadingScreen IS what the user watches while it's true.
+  useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
+
+  // Show the branded loader (not a blank screen) until auth resolves
+  if (loading) return <BrandedLoadingScreen />;
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <ClassesProvider>
       <NotificationProvider>
-        <StatusBar style="dark" />
-        <AnimatedSplashOverlay />
+        <StatusBar style={isImpersonating ? 'light' : 'dark'} />
+        <LearnerBanner />
         <Stack>
-          <Stack.Screen name="onboarding"            options={{ headerShown: false }} />
           <Stack.Screen name="auth/login"            options={{ headerShown: false }} />
           <Stack.Screen name="auth/signup"           options={{ headerShown: false }} />
           <Stack.Screen name="auth/verify-email"     options={{ headerShown: false }} />
@@ -124,9 +126,12 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <RootNavigator />
-      </AuthProvider>
+      <NetworkProvider>
+        <OfflineBanner />
+        <AuthProvider>
+          <RootNavigator />
+        </AuthProvider>
+      </NetworkProvider>
     </ErrorBoundary>
   );
 }

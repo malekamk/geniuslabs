@@ -8,10 +8,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { LoadingRow } from '@/components/loading-dots';
+import { EmptyState } from '@/components/empty-state';
 import { useAuth } from '@/context/auth-context';
 import { useNotifications } from '@/context/notification-context';
 import { supabase } from '@/utils/supabase';
+import { useTopInset } from '@/hooks/use-top-inset';
 import { BottomTabInset, Spacing } from '@/constants/theme';
+
+import ChatIllustration from '@/assets/illustrations/chat.svg';
 
 const PRIMARY = '#1565C0';
 const BG = '#F7F9F8';
@@ -50,6 +54,7 @@ export default function ChatScreen() {
   const { profile } = useAuth();
   const { markChatRead } = useNotifications();
   const insets = useSafeAreaInsets();
+  const topInset = useTopInset();
   const [groups, setGroups] = useState<ChatGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -153,7 +158,7 @@ export default function ChatScreen() {
   }
 
   const unreadCount = groups.filter(g => g.unread).length;
-  const paddingTop = Platform.select({ web: Spacing.six, default: insets.top });
+  const paddingTop = Platform.select({ web: Spacing.six, default: topInset });
 
   return (
     <View style={[styles.root, { paddingTop }]}>
@@ -174,11 +179,11 @@ export default function ChatScreen() {
         </View>
       ) : groups.length === 0 ? (
         <View style={styles.empty}>
-          <View style={styles.emptyIcon}>
-            <Ionicons name="chatbubbles-outline" size={36} color={PRIMARY} />
-          </View>
-          <ThemedText style={styles.emptyTitle}>No chats yet</ThemedText>
-          <ThemedText style={styles.emptySub}>Your subject group chats will appear here once your profile is set up.</ThemedText>
+          <EmptyState
+            illustration={ChatIllustration}
+            title="No chats yet"
+            sub="Your subject group chats will appear here once your profile is set up."
+          />
         </View>
       ) : (
         <FlatList
@@ -269,9 +274,6 @@ const styles = StyleSheet.create({
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
   loadingText: { fontSize: 14, color: '#9CA3AF' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.two, paddingHorizontal: 40 },
-  emptyIcon: { width: 72, height: 72, borderRadius: 22, backgroundColor: PRIMARY + '12', alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
-  emptySub: { fontSize: 14, color: '#9CA3AF', textAlign: 'center', lineHeight: 20 },
   sep: { height: 1, backgroundColor: '#F3F4F6', marginLeft: 76 },
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: Spacing.four, paddingVertical: 14, gap: 14 },
   avatar: { width: 52, height: 52, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EFF2F8' },

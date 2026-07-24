@@ -1,6 +1,5 @@
 ﻿import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import { uploadToStorage } from '@/utils/upload';
 import { useCallback, useEffect, useState } from 'react';
@@ -23,15 +22,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { LoadingRow } from '@/components/loading-dots';
+import { ChangePasswordModal } from '@/components/change-password-modal';
+import { DeleteAccountModal } from '@/components/delete-account-modal';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { ALL_GRADES, ALL_OFFERED_SUBJECTS } from '@/constants/curriculum';
 import { useAuth } from '@/context/auth-context';
+import { useTopInset } from '@/hooks/use-top-inset';
 import { useClasses } from '@/context/classes-context';
 import { useNotifications } from '@/context/notification-context';
 import { useSupabaseQuery } from '@/hooks/use-supabase-query';
 import { supabase, getFunctionErrorMessage } from '@/utils/supabase';
 import { log } from '@/utils/logger';
 import type { Learner, Payment, EnrolmentApplication, Profile as TutorProfile, QuizAttempt, UserMaterialProgress } from '@/types/db';
+
+import PaymentIllustration from '@/assets/illustrations/payment.svg';
 
 const PRIMARY = '#1565C0';
 const BG = '#F7F9F8';
@@ -92,6 +96,7 @@ function initials(name: string | null | undefined, email: string | null | undefi
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const topInset = useTopInset();
   const { profile, user, signOut, loginAs } = useAuth();
 
   // Tutor profile editing
@@ -122,6 +127,12 @@ export default function ProfileScreen() {
   const isTutor    = profile?.role === 'tutor';
   const isAdmin    = profile?.role === 'admin';
   const isLearner  = profile?.role === 'learner';
+
+  // Google/Apple-only accounts have no password to change — only show this
+  // for users with an email/password identity linked.
+  const hasPasswordAuth = user?.identities?.some(i => i.provider === 'email') ?? true;
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const { data: myLearnerRow } = useSupabaseQuery<Learner>('learners', {
     filter: q => q.eq('profile_id', user?.id ?? NULL_UUID),
@@ -284,7 +295,7 @@ export default function ProfileScreen() {
     refetchProgress();
   }, [selectedLearner?.id]);
 
-  const paddingTop = Platform.select({ web: Spacing.six, default: insets.top });
+  const paddingTop = Platform.select({ web: Spacing.six, default: topInset });
 
   function openEdit() {
     if (!selectedLearner) return;
@@ -372,12 +383,12 @@ export default function ProfileScreen() {
         </View>
 
         {/* ── IDENTITY CARD ── */}
-        <LinearGradient colors={[PRIMARY, '#0D3B23']} style={styles.identityCard}>
+        <View style={styles.identityCard}>
           {profile?.avatar_url ? (
             <Image source={{ uri: profile.avatar_url }} style={styles.avatarCircle} />
           ) : (
-            <View style={styles.avatarCircle}>
-              <ThemedText style={styles.avatarText}>
+            <View style={[styles.avatarCircle, { backgroundColor: PRIMARY + '15' }]}>
+              <ThemedText style={[styles.avatarText, { color: PRIMARY }]}>
                 {initials(profile?.full_name, user?.email)}
               </ThemedText>
             </View>
@@ -387,8 +398,8 @@ export default function ProfileScreen() {
             <ThemedText style={styles.idEmail}>{user?.email}</ThemedText>
             <View style={styles.idRow}>
               {profile?.role && (
-                <View style={[styles.roleBadge, { backgroundColor: ROLE_COLOR[profile.role] + '33' }]}>
-                  <ThemedText style={[styles.roleBadgeText, { color: '#fff' }]}>
+                <View style={[styles.roleBadge, { backgroundColor: ROLE_COLOR[profile.role] + '18' }]}>
+                  <ThemedText style={[styles.roleBadgeText, { color: ROLE_COLOR[profile.role] }]}>
                     {ROLE_LABEL[profile.role]}
                   </ThemedText>
                 </View>
@@ -398,7 +409,7 @@ export default function ProfileScreen() {
               )}
             </View>
           </View>
-        </LinearGradient>
+        </View>
 
         {/* ── INFO CARD ── */}
         <View style={styles.infoCard}>
@@ -571,7 +582,7 @@ export default function ProfileScreen() {
                 </View>
               ) : payments.length === 0 ? (
                 <View style={styles.emptyCard}>
-                  <Ionicons name="receipt-outline" size={28} color="#D1D5DB" />
+                  <PaymentIllustration width={90} height={90} />
                   <ThemedText style={styles.emptyText}>No payments on record yet</ThemedText>
                 </View>
               ) : (
@@ -598,7 +609,10 @@ export default function ProfileScreen() {
                           </View>
                         </View>
                       </View>
-                      {p.status === 'pending' && (
+                      {/* In-app payment trigger disabled pending App Store/Play Store
+                          review of the external Yoco checkout flow (Apple 3.1.1).
+                          Re-enable by uncommenting once cleared. */}
+                      {/* {p.status === 'pending' && (
                         <Pressable
                           style={styles.resumePayBtn}
                           disabled={isResuming}
@@ -607,7 +621,7 @@ export default function ProfileScreen() {
                             {isResuming ? 'Starting…' : 'Pay Now'}
                           </ThemedText>
                         </Pressable>
-                      )}
+                      )} */}
                     </View>
                   );
                 })
@@ -750,6 +764,40 @@ export default function ProfileScreen() {
           </>
         )}
 
+        {/* ── QUICK LINKS ── */}
+        <SectionLabel title="More" />
+        <View style={styles.cardList}>
+          <Pressable style={styles.contactRow} onPress={() => router.push('/(tabs)/gallery')}>
+            <View style={[styles.contactIcon, { backgroundColor: '#05966918' }]}>
+              <Ionicons name="images-outline" size={18} color="#059669" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={styles.contactLabel}>Gallery</ThemedText>
+              <ThemedText style={styles.contactSub}>Photos and downloads</ThemedText>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+          </Pressable>
+        </View>
+
+        {/* ── ACCOUNT ── */}
+        {hasPasswordAuth && (
+          <>
+            <SectionLabel title="Account" />
+            <View style={styles.cardList}>
+              <Pressable style={styles.contactRow} onPress={() => setChangingPassword(true)}>
+                <View style={[styles.contactIcon, { backgroundColor: PRIMARY + '18' }]}>
+                  <Ionicons name="lock-closed-outline" size={18} color={PRIMARY} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={styles.contactLabel}>Change Password</ThemedText>
+                  <ThemedText style={styles.contactSub}>Update your account password</ThemedText>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+              </Pressable>
+            </View>
+          </>
+        )}
+
         {/* ── CONTACT US ── */}
         <SectionLabel title="Contact Us" />
         <View style={styles.cardList}>
@@ -780,14 +828,24 @@ export default function ProfileScreen() {
           <ThemedText style={styles.signOutText}>Sign Out</ThemedText>
         </Pressable>
 
+        <Pressable onPress={() => setDeletingAccount(true)} style={{ alignSelf: 'center', marginTop: Spacing.three }}>
+          <ThemedText style={styles.deleteAccountLink}>Delete Account</ThemedText>
+        </Pressable>
+
         <Pressable onPress={() => router.push('/privacy-policy' as any)} style={{ alignSelf: 'center', marginTop: Spacing.three }}>
           <ThemedText style={styles.privacyLink}>Privacy Policy</ThemedText>
         </Pressable>
 
         <ThemedText style={styles.version}>Ravhuyani Genius Lab · Limpopo</ThemedText>
+        <Pressable onPress={() => Linking.openURL('https://storyset.com')} style={{ alignSelf: 'center' }}>
+          <ThemedText style={styles.attribution}>Illustrations by Storyset</ThemedText>
+        </Pressable>
 
       </View>
     </ScrollView>
+
+    <ChangePasswordModal visible={changingPassword} onClose={() => setChangingPassword(false)} />
+    <DeleteAccountModal visible={deletingAccount} onClose={() => setDeletingAccount(false)} />
 
     {/* ── LEARNER DETAIL MODAL ── */}
     <Modal
@@ -1047,8 +1105,11 @@ export default function ProfileScreen() {
                 );
               })()}
 
-              {/* ── PAY FOR THIS LEARNER ── */}
-              <ThemedText style={styles.modalSectionLabel}>MAKE A PAYMENT</ThemedText>
+              {/* ── PAY FOR THIS LEARNER ──
+                  In-app payment trigger disabled pending App Store/Play Store
+                  review of the external Yoco checkout flow (Apple 3.1.1).
+                  Re-enable by uncommenting once cleared. */}
+              {/* <ThemedText style={styles.modalSectionLabel}>MAKE A PAYMENT</ThemedText>
               {app && app.status !== 'approved' ? (
                 <View style={styles.feePrompt}>
                   <Ionicons name="lock-closed-outline" size={18} color={PRIMARY} />
@@ -1082,7 +1143,7 @@ export default function ProfileScreen() {
                     </View>
                   ))}
                 </View>
-              )}
+              )} */}
 
               {isGuardian && (
                 <Pressable
@@ -1091,6 +1152,7 @@ export default function ProfileScreen() {
                     loginAs({
                       id: selectedLearner.profile_id ?? selectedLearner.id,
                       role: 'learner',
+                      email: null,
                       full_name: selectedLearner.full_name,
                       phone: null,
                       avatar_url: null,
@@ -1098,6 +1160,7 @@ export default function ProfileScreen() {
                       subjects: null,
                       grades: [selectedLearner.grade],
                       is_active: true,
+                      must_change_password: false,
                       created_at: selectedLearner.created_at,
                       updated_at: selectedLearner.updated_at,
                     });
@@ -1207,6 +1270,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 28, fontWeight: '800', color: '#111827' },
 
   identityCard: {
+    backgroundColor: '#fff',
     marginHorizontal: Spacing.four,
     borderRadius: 8,
     padding: Spacing.four,
@@ -1214,22 +1278,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     marginBottom: Spacing.one,
+    elevation: 1,
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
   },
   avatarCircle: {
     width: 76, height: 76, borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { fontSize: 26, fontWeight: '800', color: '#fff' },
-  idName: { fontSize: 16, fontWeight: '700', color: '#fff' },
-  idEmail: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 1 },
+  avatarText: { fontSize: 26, fontWeight: '800' },
+  idName: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  idEmail: { fontSize: 12, color: '#6B7280', marginTop: 1 },
   idRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
   roleBadge: {
     paddingHorizontal: 10, paddingVertical: 3,
     borderRadius: 999,
   },
   roleBadgeText: { fontSize: 11, fontWeight: '700' },
-  idSince: { fontSize: 11, color: 'rgba(255,255,255,0.5)' },
+  idSince: { fontSize: 11, color: '#9CA3AF' },
 
   infoCard: {
     backgroundColor: '#fff',
@@ -1482,7 +1547,9 @@ const styles = StyleSheet.create({
   signOutText: { fontSize: 15, fontWeight: '700', color: '#EF4444' },
 
   version: { textAlign: 'center', fontSize: 11, color: '#D1D5DB', marginTop: Spacing.two },
+  attribution: { textAlign: 'center', fontSize: 10, color: '#D1D5DB', marginTop: 4 },
   privacyLink: { fontSize: 12, color: PRIMARY, fontWeight: '600' },
+  deleteAccountLink: { fontSize: 12, color: '#EF4444', fontWeight: '600' },
 
   feePrompt: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

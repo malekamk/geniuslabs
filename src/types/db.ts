@@ -19,6 +19,7 @@ export type QuestionType = 'multiple_choice' | 'true_false' | 'short_answer';
 export interface Profile {
   id: string;
   role: Role;
+  email: string | null;
   full_name: string | null;
   phone: string | null;
   avatar_url: string | null;

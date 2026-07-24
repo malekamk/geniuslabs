@@ -11,6 +11,8 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { supabase } from '@/utils/supabase';
 
+import ForgotPasswordIllustration from '@/assets/illustrations/forgot-password.svg';
+
 const PRIMARY = '#1565C0';
 const BG = '#F7F9F8';
 
@@ -42,6 +44,9 @@ export default function ForgotPasswordScreen() {
           <Ionicons name="arrow-back" size={22} color="#111827" />
         </Pressable>
 
+        <View style={styles.brand}>
+          <ForgotPasswordIllustration width={150} height={150} />
+        </View>
 
         <ThemedText style={styles.title}>Forgot Password?</ThemedText>
         <ThemedText style={styles.sub}>
@@ -80,6 +85,7 @@ export default function ForgotPasswordScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, paddingHorizontal: Spacing.four, gap: Spacing.three },
   backBtn: { alignSelf: 'flex-start', padding: 4 },
+  brand: { alignItems: 'center', paddingVertical: Spacing.two },
   title: { fontSize: 26, fontWeight: '800', color: '#111827', textAlign: 'center' },
   sub: { fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 20 },
   card: {

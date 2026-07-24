@@ -6,10 +6,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { LoadingRow } from '@/components/loading-dots';
+import { EmptyState } from '@/components/empty-state';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+
+import LibraryIllustration from '@/assets/illustrations/library.svg';
 import { useAuth } from '@/context/auth-context';
 import { useNotifications } from '@/context/notification-context';
 import { useSupabaseQuery } from '@/hooks/use-supabase-query';
+import { useTopInset } from '@/hooks/use-top-inset';
 import { Alert, Linking } from 'react-native';
 import { supabase } from '@/utils/supabase';
 import { getCachedMaterialUri, isMaterialCached } from '@/utils/offline-cache';
@@ -262,6 +266,7 @@ const FILTERS: Filter[] = ['All', 'Materials'];
 
 export default function TasksScreen() {
   const insets = useSafeAreaInsets();
+  const topInset = useTopInset();
   const { profile, user } = useAuth();
   const { markTasksRead } = useNotifications();
   const [filter, setFilter] = useState<Filter>('All');
@@ -369,7 +374,7 @@ export default function TasksScreen() {
       ? allQuizzes.filter(q => learnerGrades.includes(q.grade))
       : allQuizzes;
 
-  const platformPaddingTop = Platform.select({ web: Spacing.six, default: insets.top });
+  const platformPaddingTop = Platform.select({ web: Spacing.six, default: topInset });
 
   // Quizzes are paused for MVP — progress counts materials only.
   const doneCount = materials.filter((m) => m.localStatus === 'done').length;
@@ -381,17 +386,15 @@ export default function TasksScreen() {
       style={styles.scroll}
       contentInset={{ bottom: insets.bottom + BottomTabInset + Spacing.three }}
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={[styles.content, { paddingTop: platformPaddingTop }]}>
+      contentContainerStyle={[styles.content, { paddingTop: platformPaddingTop, flexGrow: 1 }]}>
 
-      <View style={{ maxWidth: MaxContentWidth, alignSelf: 'center', width: '100%' }}>
+      <View style={{ flex: 1, maxWidth: MaxContentWidth, alignSelf: 'center', width: '100%' }}>
 
         {/* HEADER */}
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <ThemedText style={styles.headerTitle}>Tasks</ThemedText>
-            <ThemedText style={styles.headerSub}>
-              {doneCount} of {totalCount} completed
-            </ThemedText>
+            
           </View>
           {isTutor ? (
             <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -431,13 +434,7 @@ export default function TasksScreen() {
           </View>
         )}
 
-        {/* PROGRESS BAR */}
-        <View style={styles.progressSection}>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${progressPct}%` as any }]} />
-          </View>
-          <ThemedText style={styles.progressText}>{progressPct}% complete</ThemedText>
-        </View>
+        
 
         {/* FILTER PILLS */}
         <View style={styles.filterRow}>
@@ -467,6 +464,10 @@ export default function TasksScreen() {
             ) : matLoading ? (
               <View style={styles.loadingRow}>
                 <LoadingRow label="Loading…" />
+              </View>
+            ) : materials.length === 0 ? (
+              <View style={styles.emptyFill}>
+                <EmptyState illustration={LibraryIllustration} title="No study materials yet" sub="Materials your tutor adds will show up here." />
               </View>
             ) : (
               <View style={styles.list}>
@@ -518,6 +519,7 @@ const mc = StyleSheet.create({
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: BG },
   content: { paddingBottom: Spacing.five },
+  emptyFill: { flex: 1, justifyContent: 'center', paddingHorizontal: Spacing.four },
 
   header: {
     flexDirection: 'row',

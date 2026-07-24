@@ -3,7 +3,7 @@ import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
-import { AppState, Linking, Platform } from 'react-native';
+import { Alert, AppState, Linking, Platform } from 'react-native';
 
 import { supabase } from '@/utils/supabase';
 import { useAuth } from '@/context/auth-context';
@@ -219,8 +219,22 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     const prompted = await AsyncStorage.getItem(PROMPTED_ONCE_KEY);
     if (!prompted && status === 'undetermined') {
       await AsyncStorage.setItem(PROMPTED_ONCE_KEY, 'true');
-      const { status: newStatus } = await ExpoNotifications.requestPermissionsAsync();
-      applyStatus(newStatus as PermissionStatus);
+      // Explain why before the OS permission sheet appears, rather than
+      // requesting it with zero context on first login.
+      Alert.alert(
+        'Stay in the loop',
+        'Turn on notifications to get updates on classes, messages, and announcements.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          {
+            text: 'Enable',
+            onPress: async () => {
+              const { status: newStatus } = await ExpoNotifications.requestPermissionsAsync();
+              applyStatus(newStatus as PermissionStatus);
+            },
+          },
+        ]
+      );
     }
   }
 

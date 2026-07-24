@@ -14,6 +14,8 @@ import { supabase } from '@/utils/supabase';
 import { log } from '@/utils/logger';
 import type { QuizQuestion } from '@/types/db';
 
+import ExamsIllustration from '@/assets/illustrations/exams.svg';
+
 const PRIMARY = '#1565C0';
 const BG = '#F7F9F8';
 
@@ -99,7 +101,7 @@ export default function QuizQuestionsScreen() {
             <LoadingRow label="Loading…" />
           ) : questions.length === 0 ? (
             <View style={styles.empty}>
-              <Ionicons name="help-circle-outline" size={36} color="#D1D5DB" />
+              <ExamsIllustration width={110} height={110} />
               <ThemedText style={styles.hint}>No questions yet. Add your first one below.</ThemedText>
             </View>
           ) : (

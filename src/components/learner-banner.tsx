@@ -1,26 +1,29 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from './themed-text';
 import { useAuth } from '@/context/auth-context';
 
-const PRIMARY = '#1565C0';
+const PRIMARY = '#5605da';
 
 export function LearnerBanner() {
   const { isImpersonating, profile, exitLoginAs } = useAuth();
+  const insets = useSafeAreaInsets();
   if (!isImpersonating) return null;
 
+  function exit() {
+    exitLoginAs();
+    router.replace('/(tabs)');
+  }
+
   return (
-    <View style={styles.banner}>
-      <Ionicons name="person-circle-outline" size={16} color="#fff" />
+    <View style={[styles.banner, { paddingTop: insets.top + 8 }]}>
       <ThemedText style={styles.text} numberOfLines={1}>
-        Logged in as <ThemedText style={styles.bold}>{profile?.full_name}</ThemedText>
+         <ThemedText style={styles.bold}>Viewing as {profile?.full_name}</ThemedText>
       </ThemedText>
-      <Pressable
-        onPress={() => { exitLoginAs(); router.replace('/(tabs)/profile'); }}
-        style={styles.exitBtn}
-        hitSlop={8}>
-        <ThemedText style={styles.exitText}>Log out</ThemedText>
+      <Pressable onPress={exit} style={styles.exitBtn} hitSlop={8}>
+        <ThemedText style={styles.exitText}>Exit</ThemedText>
       </Pressable>
     </View>
   );
@@ -33,7 +36,7 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: PRIMARY,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingBottom: 8,
   },
   text: { flex: 1, fontSize: 13, color: '#fff' },
   bold: { fontWeight: '700', color: '#fff' },

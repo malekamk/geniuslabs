@@ -11,9 +11,12 @@ import { useFocusEffect } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { LoadingDots } from '@/components/loading-dots';
+import { EmptyState } from '@/components/empty-state';
 import { supabase } from '@/utils/supabase';
 import { Spacing } from '@/constants/theme';
 import type { Learner, EnrolmentApplication } from '@/types/db';
+
+import TeamIllustration from '@/assets/illustrations/team.svg';
 
 const PRIMARY = '#1565C0';
 const BG = '#F5F6FA';
@@ -137,8 +140,7 @@ export default function AdminLearners() {
           ItemSeparatorComponent={() => <View style={{ height: Spacing.two }} />}
           ListEmptyComponent={
             <View style={s.empty}>
-              <Ionicons name="school-outline" size={40} color="#D1D5DB" />
-              <ThemedText style={s.emptyText}>No learners found</ThemedText>
+              <EmptyState illustration={TeamIllustration} title="No learners found" sub="Enrolled learners will show up here." />
             </View>
           }
           renderItem={({ item }) => (
@@ -317,7 +319,6 @@ const s = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '700', color: '#111827' },
   sub: { fontSize: 12, color: '#6B7280', marginTop: 2 },
   empty: { paddingTop: 60, alignItems: 'center', gap: 8 },
-  emptyText: { fontSize: 15, color: '#9CA3AF' },
 
   // Modal
   modalRoot: { flex: 1, backgroundColor: BG },

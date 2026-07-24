@@ -10,6 +10,7 @@ type AuthContextType = {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  realProfile: Profile | null;
   loading: boolean;
   signOut: () => Promise<void>;
   isImpersonating: boolean;
@@ -109,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, profile, loading, signOut, isImpersonating, loginAs, exitLoginAs, refreshProfile }}>
+    <AuthContext.Provider value={{ session, user: session?.user ?? null, profile, realProfile, loading, signOut, isImpersonating, loginAs, exitLoginAs, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

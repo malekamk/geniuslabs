@@ -6,6 +6,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { useTopInset } from '@/hooks/use-top-inset';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 
 const PRIMARY = '#1565C0';
@@ -109,11 +110,12 @@ function SubjectCard({ title, desc, color, onEnrol }: { title: string; desc: str
 
 export default function ProgramsScreen() {
   const insets = useSafeAreaInsets();
+  const topInset = useTopInset();
   const [filter, setFilter] = useState<Filter>('All');
 
   const platformPaddingTop = Platform.select({
     web: Spacing.six,
-    default: insets.top,
+    default: topInset,
   });
 
   const totalSubjects = PROGRAMS.reduce((n, b) => n + b.subjects.length, 0);

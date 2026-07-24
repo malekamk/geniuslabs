@@ -14,6 +14,8 @@ import { Spacing } from '@/constants/theme';
 import { supabase } from '@/utils/supabase';
 import { log } from '@/utils/logger';
 
+import OtpIllustration from '@/assets/illustrations/otp.svg';
+
 const PRIMARY = '#1565C0';
 const BG = '#F7F9F8';
 const RESEND_COOLDOWN_SECONDS = 60;
@@ -97,6 +99,7 @@ export default function VerifyEmailScreen() {
         </Pressable>
 
         <View style={styles.brand}>
+          <OtpIllustration width={150} height={150} />
           <ThemedText style={styles.title}>Check Your Email</ThemedText>
           <ThemedText style={styles.sub}>
             We sent a 6-digit code to {email ?? 'your email'}. Enter it below to verify your account.

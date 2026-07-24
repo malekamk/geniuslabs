@@ -6,13 +6,18 @@ import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { EmptyState } from '@/components/empty-state';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useClasses } from '@/context/classes-context';
 import { useAuth } from '@/context/auth-context';
 import { useSupabaseQuery } from '@/hooks/use-supabase-query';
+import { useTopInset } from '@/hooks/use-top-inset';
 import { supabase } from '@/utils/supabase';
 import { ClassItem } from '@/data/classes';
 import type { Learner, EnrolmentApplication } from '@/types/db';
+
+import ScheduleIllustration from '@/assets/illustrations/schedule.svg';
+import ErrorIllustration from '@/assets/illustrations/error.svg';
 
 const PRIMARY = '#1565C0';
 const BLUE = '#1565C0';
@@ -206,6 +211,7 @@ function SectionLabel({ title, count }: { title: string; count: number }) {
 
 export default function ClassesScreen() {
   const insets = useSafeAreaInsets();
+  const topInset = useTopInset();
   const { classes, loading, error, refetch, deleteClass } = useClasses();
   useFocusEffect(useCallback(() => { refetch(); }, []));
   const { profile, user } = useAuth();
@@ -259,7 +265,7 @@ export default function ClassesScreen() {
 
   const platformPaddingTop = Platform.select({
     web: Spacing.six,
-    default: insets.top,
+    default: topInset,
   });
 
   return (
@@ -267,9 +273,9 @@ export default function ClassesScreen() {
       style={styles.scroll}
       contentInset={{ bottom: insets.bottom + BottomTabInset + Spacing.three }}
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={[styles.content, { paddingTop: platformPaddingTop }]}>
+      contentContainerStyle={[styles.content, { paddingTop: platformPaddingTop, flexGrow: 1 }]}>
 
-      <View style={{ maxWidth: MaxContentWidth, alignSelf: 'center', width: '103%' }}>
+      <View style={{ flex: 1, maxWidth: MaxContentWidth, alignSelf: 'center', width: '103%' }}>
 
         {/* HEADER */}
         <View style={styles.header}>
@@ -339,13 +345,13 @@ export default function ClassesScreen() {
           </View>
         )}
         {!loading && error && (
-          <View style={styles.stateContainer}>
-            <Ionicons name="cloud-offline-outline" size={32} color="#EF4444" />
-            <ThemedText style={styles.stateText}>Could not load classes</ThemedText>
-            <Pressable style={styles.retryBtn} onPress={refetch}>
-              <ThemedText style={styles.retryText}>Retry</ThemedText>
-            </Pressable>
-          </View>
+          <EmptyState
+            illustration={ErrorIllustration}
+            title="Could not load classes"
+            sub="Check your connection and try again."
+            actionLabel="Retry"
+            onAction={refetch}
+          />
         )}
 
         {/* Grade filter banner */}
@@ -392,12 +398,8 @@ export default function ClassesScreen() {
               </>
             )}
             {liveClasses.length === 0 && upcomingClasses.length === 0 && pastClasses.length === 0 && (
-              <View style={styles.emptyState}>
-                <View style={styles.emptyIconWrap}>
-                  <Ionicons name="calendar-outline" size={32} color="#9CA3AF" />
-                </View>
-                <ThemedText style={styles.emptyTitle}>No classes yet</ThemedText>
-                <ThemedText style={styles.emptyDesc}>Check back later.</ThemedText>
+              <View style={styles.emptyFill}>
+                <EmptyState illustration={ScheduleIllustration} title="No classes yet" sub="Check back later." />
               </View>
             )}
           </>
@@ -411,6 +413,7 @@ export default function ClassesScreen() {
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: BG },
   content: { paddingBottom: Spacing.five },
+  emptyFill: { flex: 1, justifyContent: 'center', paddingHorizontal: Spacing.four },
 
   header: {
     flexDirection: 'row',
@@ -622,27 +625,8 @@ const styles = StyleSheet.create({
   },
   joinBtnText: { color: '#fff', fontWeight: '700', fontSize: 14, flex: 1 },
 
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 48,
-    gap: Spacing.two,
-  },
-  emptyIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.one,
-  },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: '#374151' },
-  emptyDesc: { fontSize: 13, color: '#9CA3AF', textAlign: 'center' },
-
   stateContainer: { alignItems: 'center', paddingVertical: 48, gap: Spacing.two },
   stateText: { fontSize: 14, color: '#9CA3AF' },
-  retryBtn: { backgroundColor: PRIMARY, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8, marginTop: Spacing.one },
-  retryText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   gradeBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

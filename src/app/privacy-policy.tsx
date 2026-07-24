@@ -94,7 +94,7 @@ export default function PrivacyPolicyScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ padding: Spacing.four, paddingBottom: insets.bottom + Spacing.five }}>
 
-        <ThemedText style={styles.effective}>Effective 20 July 2026 · Governed by POPIA (South Africa)</ThemedText>
+        <ThemedText style={styles.effective}>Effective 24 July 2026 · Governed by POPIA (South Africa)</ThemedText>
         <ThemedText style={styles.intro}>
           How the Genius Labs app collects, uses, and protects your information — matched to what the app actually does, not a generic template.
         </ThemedText>

@@ -244,3 +244,110 @@ ALTER TABLE learners ADD CONSTRAINT learners_profile_id_key UNIQUE (profile_id);
 -- src/app/auth/set-password.tsx before reaching the rest of the app.
 -- ============================================================
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false;
+
+-- ============================================================
+-- Account deletion (Apple 5.1.1(v) / Google Play account deletion policy)
+-- Deploy: supabase functions deploy delete-account
+--
+-- The function anonymizes profiles/learners PII and calls
+-- auth.admin.deleteUser() — it does NOT touch payments, classes, chat
+-- messages, or quiz_attempts, since those are shared/legal-record tables
+-- (deleting them would corrupt other users' chat history and destroy
+-- financial records POPIA/tax law expect retained). No RLS policy is
+-- needed for it since it runs entirely with the service_role key.
+--
+-- If a future review flags orphaned-but-identifiable data in tables not
+-- covered above, extend supabase/functions/delete-account/index.ts rather
+-- than adding it here.
+-- ============================================================
+
+-- ============================================================
+-- profiles.email — admin Users list (src/app/(tabs)/admin-users.tsx) needs
+-- to show each user's email, but email lives in auth.users, which the
+-- client can't read directly (no client-side join across schemas). Mirror
+-- it onto profiles instead: a SECURITY DEFINER trigger fills it in on every
+-- future insert (covers signup.tsx, admin-create-user,
+-- guardian-invite-learner — anywhere a profiles row gets created), and the
+-- UPDATE below backfills every row that already exists.
+-- ============================================================
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email text;
+
+CREATE OR REPLACE FUNCTION public.sync_profile_email()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+BEGIN
+  SELECT email INTO NEW.email FROM auth.users WHERE id = NEW.id;
+  RETURN NEW;
+END; $$;
+
+DROP TRIGGER IF EXISTS trg_sync_profile_email ON profiles;
+CREATE TRIGGER trg_sync_profile_email
+  BEFORE INSERT ON profiles
+  FOR EACH ROW EXECUTE FUNCTION public.sync_profile_email();
+
+-- One-time backfill for rows created before this trigger existed
+UPDATE profiles SET email = u.email
+FROM auth.users u
+WHERE u.id = profiles.id AND profiles.email IS NULL;
+
+-- ============================================================
+-- admin_dashboard_stats — src/screens/admin-dashboard.tsx was firing 11
+-- separate round trips on mount (Promise.all of counts + raw payment rows
+-- reduced client-side). Collapsed into one SQL function: every count/sum
+-- is computed server-side with aggregates, the revenue sparkline is a
+-- running-sum window function instead of summing rows in JS, and the
+-- "recent" lists are returned inline as JSON — one round trip total.
+-- admin-only: raises if the caller isn't an admin, since this bypasses RLS
+-- (SECURITY DEFINER) to aggregate across every user's data.
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.admin_dashboard_stats(p_mtd text, p_prev_mtd text)
+RETURNS json
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE
+  result json;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin') THEN
+    RAISE EXCEPTION 'Forbidden';
+  END IF;
+
+  SELECT json_build_object(
+    'learners', (SELECT count(*) FROM learners),
+    'tutors', (SELECT count(*) FROM profiles WHERE role = 'tutor' AND is_active = true),
+    'pending_apps', (SELECT count(*) FROM enrolment_applications WHERE status = 'pending'),
+    'revenue_mtd', (SELECT coalesce(sum(amount), 0) FROM payments WHERE status = 'paid' AND period_month = p_mtd),
+    'prev_revenue', (SELECT coalesce(sum(amount), 0) FROM payments WHERE status = 'paid' AND period_month = p_prev_mtd),
+    'outstanding', (SELECT coalesce(sum(amount), 0) FROM payments WHERE status IN ('pending', 'overdue')),
+    'total_attempts', (SELECT count(*) FROM quiz_attempts WHERE status = 'completed'),
+    'passed_attempts', (SELECT count(*) FROM quiz_attempts WHERE status = 'completed' AND passed = true),
+    'classes_total', (SELECT count(*) FROM classes),
+    'sparkline', (
+      SELECT coalesce(json_agg(cum ORDER BY paid_at), '[]'::json)
+      FROM (
+        SELECT paid_at, sum(amount) OVER (ORDER BY paid_at) AS cum
+        FROM payments
+        WHERE status = 'paid' AND paid_at IS NOT NULL AND period_month = p_mtd
+      ) t
+    ),
+    'recent_apps', (
+      SELECT coalesce(json_agg(row_to_json(a)), '[]'::json)
+      FROM (
+        SELECT id, learner_name, grade, status, submitted_at, updated_at
+        FROM enrolment_applications
+        ORDER BY updated_at DESC
+        LIMIT 5
+      ) a
+    ),
+    'recent_payments', (
+      SELECT coalesce(json_agg(row_to_json(p)), '[]'::json)
+      FROM (
+        SELECT id, amount, status, type, created_at, updated_at
+        FROM payments
+        ORDER BY updated_at DESC
+        LIMIT 5
+      ) p
+    )
+  ) INTO result;
+
+  RETURN result;
+END; $$;
+
+GRANT EXECUTE ON FUNCTION public.admin_dashboard_stats(text, text) TO authenticated;

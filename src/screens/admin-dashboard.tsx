@@ -3,17 +3,19 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { InteractionManager, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { LoadingDots } from '@/components/loading-dots';
 import { useAuth } from '@/context/auth-context';
+import { useTopInset } from '@/hooks/use-top-inset';
 
 const Tap = TouchableOpacity as any;
 import { useNotifications } from '@/context/notification-context';
 import { supabase } from '@/utils/supabase';
+import { log } from '@/utils/logger';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 
 const PRIMARY = '#1565C0';
@@ -42,12 +44,10 @@ const MTD = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}
 const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 const PREV_MTD = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
 
-function buildSparkline(rows: { amount: number; paid_at: string | null }[]): number[] {
-  const sorted = [...rows].filter(r => r.paid_at).sort((a, b) => (a.paid_at! < b.paid_at! ? -1 : 1));
-  if (sorted.length === 0) return [0, 0];
-  const cumulative: number[] = [];
-  let running = 0;
-  for (const r of sorted) { running += Number(r.amount); cumulative.push(running); }
+// The RPC already returns a running-cumulative revenue series (computed in
+// SQL) — this just thins it down to at most 8 points for the sparkline.
+function downsampleSparkline(cumulative: number[]): number[] {
+  if (cumulative.length === 0) return [0, 0];
   if (cumulative.length === 1) return [0, cumulative[0]];
   if (cumulative.length <= 8) return cumulative;
   const step = (cumulative.length - 1) / 7;
@@ -58,57 +58,63 @@ export default function AdminDashboard() {
   const { profile, signOut } = useAuth();
   const { unreadCount } = useNotifications();
   const insets = useSafeAreaInsets();
+  const topInset = useTopInset();
   const [stats, setStats] = useState<Stats | null>(null);
   const [recentApps, setRecentApps] = useState<RecentApp[]>([]);
   const [recentPayments, setRecentPayments] = useState<RecentPayment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useFocusEffect(useCallback(() => { fetchAll(); }, []));
+  // Deferred via InteractionManager so the fetch never races the native tab
+  // bar's touch-handler setup on first landing.
+  useFocusEffect(useCallback(() => {
+    const task = InteractionManager.runAfterInteractions(() => fetchAll());
+    return () => task.cancel();
+  }, []));
 
+  // Single round trip instead of 11 — all counts/sums/sparkline/recent lists
+  // are computed server-side in one SQL function (see supabase-rls-notes.sql,
+  // admin_dashboard_stats) rather than pulling raw rows down to reduce here.
   async function fetchAll() {
     setLoading(true);
-    const [
-      { count: learners },
-      { count: tutors },
-      { count: pendingApps },
-      { data: paidData },
-      { data: prevPaidData },
-      { data: outData },
-      { count: totalAttempts },
-      { count: passedAttempts },
-      { count: classesTotal },
-      { data: apps },
-      { data: payments },
-    ] = await Promise.all([
-      supabase.from('learners').select('*', { count: 'exact', head: true }),
-      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'tutor').eq('is_active', true),
-      supabase.from('enrolment_applications').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-      supabase.from('payments').select('amount, paid_at').eq('status', 'paid').eq('period_month', MTD),
-      supabase.from('payments').select('amount').eq('status', 'paid').eq('period_month', PREV_MTD),
-      supabase.from('payments').select('amount').in('status', ['pending', 'overdue']),
-      supabase.from('quiz_attempts').select('*', { count: 'exact', head: true }).eq('status', 'completed'),
-      supabase.from('quiz_attempts').select('*', { count: 'exact', head: true }).eq('status', 'completed').eq('passed', true),
-      supabase.from('classes').select('*', { count: 'exact', head: true }),
-      supabase.from('enrolment_applications').select('id, learner_name, grade, status, submitted_at, updated_at').order('updated_at', { ascending: false }).limit(5),
-      supabase.from('payments').select('id, amount, status, type, created_at, updated_at').order('updated_at', { ascending: false }).limit(5),
-    ]);
+    const { data, error } = await supabase.rpc('admin_dashboard_stats', {
+      p_mtd: MTD,
+      p_prev_mtd: PREV_MTD,
+    });
 
-    const revenueMtd = (paidData ?? []).reduce((s: number, p: any) => s + Number(p.amount), 0);
-    const prevRevenue = (prevPaidData ?? []).reduce((s: number, p: any) => s + Number(p.amount), 0);
-    const outstanding = (outData ?? []).reduce((s: number, p: any) => s + Number(p.amount), 0);
-    const passRate = totalAttempts ? Math.round(((passedAttempts ?? 0) / totalAttempts) * 100) : 0;
+    if (error) {
+      log.error('AdminDashboard', 'fetchAll failed', error);
+      setLoading(false);
+      return;
+    }
+
+    const revenueMtd = Number(data.revenue_mtd ?? 0);
+    const prevRevenue = Number(data.prev_revenue ?? 0);
+    const outstanding = Number(data.outstanding ?? 0);
+    const totalAttempts = Number(data.total_attempts ?? 0);
+    const passedAttempts = Number(data.passed_attempts ?? 0);
+    const passRate = totalAttempts ? Math.round((passedAttempts / totalAttempts) * 100) : 0;
     const revenueDeltaPct = prevRevenue > 0
       ? Math.round(((revenueMtd - prevRevenue) / prevRevenue) * 100)
       : (revenueMtd > 0 ? 100 : 0);
-    const sparkline = buildSparkline((paidData ?? []) as { amount: number; paid_at: string | null }[]);
+    const sparkline = downsampleSparkline(((data.sparkline ?? []) as number[]).map(Number));
 
-    setStats({ learners: learners ?? 0, tutors: tutors ?? 0, pendingApps: pendingApps ?? 0, revenueMtd, outstanding, passRate, classesTotal: classesTotal ?? 0, revenueDeltaPct, sparkline });
-    setRecentApps((apps ?? []) as RecentApp[]);
-    setRecentPayments((payments ?? []) as RecentPayment[]);
+    setStats({
+      learners: Number(data.learners ?? 0),
+      tutors: Number(data.tutors ?? 0),
+      pendingApps: Number(data.pending_apps ?? 0),
+      revenueMtd,
+      outstanding,
+      passRate,
+      classesTotal: Number(data.classes_total ?? 0),
+      revenueDeltaPct,
+      sparkline,
+    });
+    setRecentApps((data.recent_apps ?? []) as RecentApp[]);
+    setRecentPayments((data.recent_payments ?? []) as RecentPayment[]);
     setLoading(false);
   }
 
-  const paddingTop = insets.top + 12;
+  const paddingTop = topInset + 12;
 
   return (
     <View style={[styles.root, { paddingTop }]}>

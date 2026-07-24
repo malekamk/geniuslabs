@@ -13,9 +13,12 @@ import { useFocusEffect } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { LoadingDots } from '@/components/loading-dots';
+import { EmptyState } from '@/components/empty-state';
 import { supabase } from '@/utils/supabase';
 import { uploadToStorage } from '@/utils/upload';
 import { Spacing } from '@/constants/theme';
+
+import PhotosIllustration from '@/assets/illustrations/photos.svg';
 
 const PRIMARY = '#1565C0';
 const BG = '#F5F6FA';
@@ -118,9 +121,7 @@ export default function AdminGallery() {
         <LoadingDots style={{ marginTop: 40, alignSelf: 'center' }} />
       ) : items.length === 0 ? (
         <View style={s.empty}>
-          <Ionicons name="images-outline" size={52} color="#D1D5DB" />
-          <ThemedText style={s.emptyTitle}>No photos yet</ThemedText>
-          <ThemedText style={s.emptySub}>Tap Add to upload the first photo.</ThemedText>
+          <EmptyState illustration={PhotosIllustration} title="No photos yet" sub="Tap Add to upload the first photo." />
         </View>
       ) : (
         <FlatList
@@ -203,8 +204,6 @@ const s = StyleSheet.create({
   },
   addText: { fontSize: 13, fontWeight: '700', color: PRIMARY },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#374151' },
-  emptySub: { fontSize: 13, color: '#9CA3AF', textAlign: 'center' },
   thumb: { width: ITEM, height: ITEM, borderRadius: 8, overflow: 'hidden', backgroundColor: '#E5E7EB' },
   thumbImg: { width: '100%', height: '100%' },
   captionWrap: {

@@ -24,6 +24,8 @@ import { log } from '@/utils/logger';
 import type { ChatRoomMessage, ChatRoomRead } from '@/types/db';
 import { Spacing } from '@/constants/theme';
 
+import ChatIllustration from '@/assets/illustrations/chat.svg';
+
 const PRIMARY = '#1565C0';
 const TUTOR_COLOR = '#1565C0';
 const SENT_COLOR = PRIMARY;
@@ -233,6 +235,7 @@ export default function ChatRoomScreen() {
         </View>
       ) : messages.length === 0 ? (
         <View style={styles.emptyWrap}>
+          <ChatIllustration width={130} height={130} />
           <ThemedText style={styles.emptyText}>👋 Be the first to say something!</ThemedText>
         </View>
       ) : (
@@ -422,7 +425,7 @@ const styles = StyleSheet.create({
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loadingText: { fontSize: 14, color: '#8E8E93' },
 
-  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
   emptyText: { fontSize: 15, color: '#8E8E93' },
 
   list: { paddingTop: 8, paddingBottom: 8 },

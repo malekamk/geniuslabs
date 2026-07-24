@@ -12,6 +12,8 @@ import { supabase } from '@/utils/supabase';
 import { log } from '@/utils/logger';
 import type { QuizQuestion } from '@/types/db';
 
+import ExamsIllustration from '@/assets/illustrations/exams.svg';
+
 const PRIMARY = '#1A6B3C';
 const BLUE = '#1565C0';
 const BG = '#F7F9F8';
@@ -43,7 +45,7 @@ export default function QuizScreen() {
   if (questions.length === 0) {
     return (
       <View style={styles.center}>
-        <Ionicons name="help-circle-outline" size={48} color="#D1D5DB" />
+        <ExamsIllustration width={140} height={140} />
         <ThemedText style={styles.emptyTitle}>Quiz Coming Soon</ThemedText>
         <ThemedText style={styles.hint}>The tutor hasn&apos;t added questions yet.</ThemedText>
         <Pressable style={styles.backBtn} onPress={() => router.back()}>

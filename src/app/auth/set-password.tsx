@@ -14,6 +14,8 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/utils/supabase';
 import { log } from '@/utils/logger';
 
+import SetPasswordIllustration from '@/assets/illustrations/set-password.svg';
+
 const PRIMARY = '#1565C0';
 const BG = '#F7F9F8';
 
@@ -59,6 +61,7 @@ export default function SetPasswordScreen() {
       <View style={[styles.root, { paddingTop: insets.top + Spacing.five }]}>
 
         <View style={styles.brand}>
+          <SetPasswordIllustration width={150} height={150} />
           <ThemedText style={styles.title}>Set Your Password</ThemedText>
           <ThemedText style={styles.sub}>You're signing in with a temporary password — set your own to continue.</ThemedText>
         </View>

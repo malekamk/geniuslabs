@@ -8,10 +8,13 @@ import { useFocusEffect } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { LoadingDots } from '@/components/loading-dots';
+import { EmptyState } from '@/components/empty-state';
 import { supabase } from '@/utils/supabase';
 import { sendNotifications } from '@/utils/notify';
 import { Spacing } from '@/constants/theme';
 import type { Material, MaterialType } from '@/types/db';
+
+import LibraryIllustration from '@/assets/illustrations/library.svg';
 
 const PRIMARY = '#1565C0';
 const BG = '#F5F6FA';
@@ -124,8 +127,7 @@ export default function AdminMaterials() {
           ItemSeparatorComponent={() => <View style={{ height: Spacing.two }} />}
           ListEmptyComponent={
             <View style={s.empty}>
-              <Ionicons name="book-outline" size={40} color="#D1D5DB" />
-              <ThemedText style={s.emptyText}>No materials found</ThemedText>
+              <EmptyState illustration={LibraryIllustration} title="No materials found" sub="Study resources you add will show up here." />
             </View>
           }
           renderItem={({ item }) => {
@@ -198,7 +200,6 @@ const s = StyleSheet.create({
 
   list: { paddingHorizontal: Spacing.four, paddingBottom: 40 },
   empty: { paddingTop: 60, alignItems: 'center', gap: 8 },
-  emptyText: { fontSize: 15, color: '#9CA3AF' },
 
   card: {
     backgroundColor: '#fff', borderRadius: 8, padding: Spacing.three, gap: Spacing.two,

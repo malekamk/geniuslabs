@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/utils/supabase';
 import { log } from '@/utils/logger';
+import { useNetwork } from '@/context/network-context';
 
 type QueryState<T> = {
   data: T[];
@@ -18,12 +19,24 @@ export function useSupabaseQuery<T>(
   table: string,
   options?: QueryOptions
 ): QueryState<T> {
+  const { isOnline } = useNetwork();
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
   const fetch = useCallback(async () => {
+    if (!isOnline) {
+      // Don't attempt a call guaranteed to fail — surface a friendly,
+      // recognizable state instead of Supabase's generic network error.
+      // `isOnline` is itself a dependency below, so this effect re-runs
+      // (and retries automatically) the instant connectivity returns.
+      log.warn(table, 'Skipped fetch — offline');
+      setError('No internet connection');
+      setLoading(false);
+      return;
+    }
+
     log.info(table, 'Fetching…');
     setLoading(true);
     setError(null);
@@ -42,7 +55,7 @@ export function useSupabaseQuery<T>(
     log.ok(table, `Fetched ${rows?.length ?? 0} rows`);
     setData((rows as T[]) ?? []);
     setLoading(false);
-  }, [table, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [table, tick, isOnline]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetch(); }, [fetch]);
 

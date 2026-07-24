@@ -11,9 +11,13 @@ import { useFocusEffect } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { LoadingDots } from '@/components/loading-dots';
+import { EmptyState } from '@/components/empty-state';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useTopInset } from '@/hooks/use-top-inset';
 import { supabase } from '@/utils/supabase';
+
+import PhotosIllustration from '@/assets/illustrations/photos.svg';
 
 const PRIMARY = '#1565C0';
 const BG = '#F5F6FA';
@@ -25,6 +29,7 @@ type GalleryItem = { id: string; url: string; caption: string | null; created_at
 
 export default function GalleryScreen() {
   const insets = useSafeAreaInsets();
+  const topInset = useTopInset();
   const { profile } = useAuth();
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +47,7 @@ export default function GalleryScreen() {
     setLoading(false);
   }
 
-  const paddingTop = insets.top + Spacing.three;
+  const paddingTop = topInset + Spacing.three;
 
   return (
     <View style={[styles.root, { paddingTop }]}>
@@ -62,9 +67,7 @@ export default function GalleryScreen() {
         <LoadingDots style={{ marginTop: 40, alignSelf: 'center' }} />
       ) : items.length === 0 ? (
         <View style={styles.empty}>
-          <Ionicons name="images-outline" size={52} color="#D1D5DB" />
-          <ThemedText style={styles.emptyTitle}>No photos yet</ThemedText>
-          <ThemedText style={styles.emptySub}>School activity photos will appear here.</ThemedText>
+          <EmptyState illustration={PhotosIllustration} title="No photos yet" sub="School activity photos will appear here." />
         </View>
       ) : (
         <FlatList
@@ -131,8 +134,6 @@ const styles = StyleSheet.create({
   },
   uploadText: { fontSize: 13, fontWeight: '700', color: PRIMARY },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#374151' },
-  emptySub: { fontSize: 13, color: '#9CA3AF', textAlign: 'center' },
   thumb: {
     width: ITEM, height: ITEM, borderRadius: 8, overflow: 'hidden',
     backgroundColor: '#E5E7EB',

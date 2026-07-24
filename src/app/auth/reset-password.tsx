@@ -15,6 +15,9 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/utils/supabase';
 import { log } from '@/utils/logger';
 
+import OtpIllustration from '@/assets/illustrations/otp.svg';
+import SetPasswordIllustration from '@/assets/illustrations/set-password.svg';
+
 const PRIMARY = '#1565C0';
 const BG = '#F7F9F8';
 
@@ -83,6 +86,7 @@ export default function ResetPasswordScreen() {
         {step === 'code' ? (
           <>
             <View style={styles.brand}>
+              <OtpIllustration width={140} height={140} />
               <ThemedText style={styles.title}>Enter Reset Code</ThemedText>
               <ThemedText style={styles.sub}>
                 We sent a 6-digit code to {email ?? 'your email'}. Enter it below to continue.
@@ -104,6 +108,7 @@ export default function ResetPasswordScreen() {
         ) : (
           <>
             <View style={styles.brand}>
+              <SetPasswordIllustration width={140} height={140} />
               <ThemedText style={styles.title}>Set New Password</ThemedText>
               <ThemedText style={styles.sub}>Choose a new password for your account.</ThemedText>
             </View>

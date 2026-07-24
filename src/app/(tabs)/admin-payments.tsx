@@ -7,10 +7,14 @@ import { useFocusEffect } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { LoadingDots } from '@/components/loading-dots';
+import { EmptyState } from '@/components/empty-state';
 import { supabase } from '@/utils/supabase';
 import { sendNotifications } from '@/utils/notify';
+import { useTopInset } from '@/hooks/use-top-inset';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import type { Payment } from '@/types/db';
+
+import PaymentIllustration from '@/assets/illustrations/payment.svg';
 
 const PRIMARY = '#1565C0';
 const BG = '#F5F6FA';
@@ -33,6 +37,7 @@ const PAY_COLOR: Record<string, { bg: string; text: string }> = {
 
 export default function AdminPayments() {
   const insets = useSafeAreaInsets();
+  const topInset = useTopInset();
   const [filter, setFilter] = useState<Filter>('all');
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,7 +82,7 @@ export default function AdminPayments() {
     ]);
   }
 
-  const paddingTop = insets.top + Spacing.three;
+  const paddingTop = topInset + Spacing.three;
 
   return (
     <View style={[styles.root, { paddingTop }]}>
@@ -113,8 +118,7 @@ export default function AdminPayments() {
         <LoadingDots style={{ marginTop: 40 }} />
       ) : payments.length === 0 ? (
         <View style={styles.empty}>
-          <Ionicons name="card-outline" size={40} color="#D1D5DB" />
-          <ThemedText style={styles.emptyText}>No {filter === 'all' ? '' : filter} payments</ThemedText>
+          <EmptyState illustration={PaymentIllustration} title={`No ${filter === 'all' ? '' : filter + ' '}payments`} sub="Payments will show up here once recorded." />
         </View>
       ) : (
         <FlatList
@@ -170,7 +174,6 @@ const styles = StyleSheet.create({
   filterText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
   filterTextActive: { color: '#fff' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
-  emptyText: { fontSize: 15, color: '#9CA3AF' },
   card: { backgroundColor: '#fff', borderRadius: 8, padding: Spacing.three, gap: Spacing.two, elevation: 1, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   icon: { width: 44, height: 44, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },

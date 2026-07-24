@@ -5,7 +5,6 @@ import * as StoreReview from 'expo-store-review';
 import { useState } from 'react';
 import {
   Alert,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -20,9 +19,12 @@ import { ThemedText } from '@/components/themed-text';
 import { GoogleIcon } from '@/components/google-icon';
 import { LoadingDots } from '@/components/loading-dots';
 import { Spacing } from '@/constants/theme';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { log } from '@/utils/logger';
 import { supabase } from '@/utils/supabase';
-import { signInWithProvider } from '@/utils/oauth';
+import { signInWithProvider, signInWithAppleNative } from '@/utils/oauth';
+
+import LoginIllustration from '@/assets/illustrations/login.svg';
 
 const LOGIN_COUNT_KEY = 'geniuslabs_login_count';
 
@@ -71,6 +73,19 @@ export default function LoginScreen() {
     }
   }
 
+  async function handleAppleNative() {
+    setOauthLoading('apple');
+    try {
+      const session = await signInWithAppleNative();
+      if (session) maybeRequestReview();
+    } catch (e: any) {
+      log.error('Login', 'Apple native sign-in failed', e);
+      Alert.alert('Sign-in Failed', e?.message ?? 'Please try again.');
+    } finally {
+      setOauthLoading(null);
+    }
+  }
+
   async function quickLogin(email: string, password: string) {
     setLoading(true);
     await supabase.auth.signInWithPassword({ email, password });
@@ -111,11 +126,7 @@ export default function LoginScreen() {
 
         {/* LOGO / BRAND */}
         <View style={styles.brand}>
-          {/* <Image
-            source={require('@/assets/images/geniuslabs-logo.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          /> */}
+          <LoginIllustration width={180} height={180} />
           <ThemedText style={styles.brandSub}>Sign in to your account</ThemedText>
         </View>
 
@@ -193,19 +204,19 @@ export default function LoginScreen() {
             </Pressable>
 
             {Platform.OS === 'ios' && (
-              <Pressable
-                style={[styles.oauthBtn, styles.appleBtn, oauthLoading === 'apple' && { opacity: 0.6 }]}
-                disabled={!!oauthLoading}
-                onPress={() => handleOAuth('apple')}>
-                {oauthLoading === 'apple' ? (
+              oauthLoading === 'apple' ? (
+                <View style={[styles.oauthBtn, styles.appleBtn]}>
                   <LoadingDots color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="logo-apple" size={20} color="#fff" />
-                    <ThemedText style={[styles.oauthBtnText, { color: '#fff' }]}>Continue with Apple</ThemedText>
-                  </>
-                )}
-              </Pressable>
+                </View>
+              ) : (
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                  cornerRadius={8}
+                  style={styles.appleNativeBtn}
+                  onPress={handleAppleNative}
+                />
+              )
             )}
           </View>
         </View>
@@ -243,10 +254,9 @@ export default function LoginScreen() {
           <ThemedText style={styles.forgotLink}>Forgot your password?</ThemedText>
         </Pressable>
 
-        {/* <ThemedText style={[styles.footerText, { textAlign: 'center', marginTop: Spacing.two }]}>
-          Rhavuyani Genius Lab
-        </ThemedText> */}
-        
+        <Pressable onPress={() => router.push('/privacy-policy' as any)} style={{ alignSelf: 'center', marginTop: Spacing.two }}>
+          <ThemedText style={styles.footerText}>Privacy Policy</ThemedText>
+        </Pressable>
 
       </ScrollView>
     </KeyboardAvoidingView>
@@ -257,7 +267,6 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, paddingHorizontal: Spacing.four, paddingBottom: Spacing.six, gap: Spacing.four },
 
   brand: { alignItems: 'center', gap: Spacing.two, paddingVertical: Spacing.three },
-  logo: { width: 150, height: 100 },
   brandSub: { fontSize: 18, color: '#000' ,textAlign: 'center', fontWeight: '600'},
 
   card: {
@@ -292,6 +301,7 @@ const styles = StyleSheet.create({
   },
   oauthBtnText: { fontSize: 15, fontWeight: '600', color: '#111827' },
   appleBtn: { backgroundColor: '#000', borderColor: '#000' },
+  appleNativeBtn: { height: 48, width: '100%' },
 
   footer: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: Spacing.one },
   footerText: { fontSize: 13, color: '#6B7280' },

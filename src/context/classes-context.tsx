@@ -4,6 +4,8 @@ import { Alert } from 'react-native';
 import { supabase } from '@/utils/supabase';
 import { log } from '@/utils/logger';
 import { ClassItem } from '@/data/classes';
+import { useAuth } from '@/context/auth-context';
+import { useNetwork } from '@/context/network-context';
 
 const TAG = 'Classes';
 
@@ -42,11 +44,19 @@ type ClassesContextType = {
 const ClassesContext = createContext<ClassesContextType | null>(null);
 
 export function ClassesProvider({ children }: { children: ReactNode }) {
+  const { session } = useAuth();
+  const { isOnline } = useNetwork();
   const [items, setItems] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchClasses = useCallback(async () => {
+    if (!isOnline) {
+      log.warn(TAG, 'Skipped fetch — offline');
+      setError('No internet connection');
+      setLoading(false);
+      return;
+    }
     log.info(TAG, 'Fetching classes…');
     setLoading(true);
     setError(null);
@@ -69,9 +79,16 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
     log.ok(TAG, `Fetched ${mapped.length} classes`);
     setItems(mapped);
     setLoading(false);
-  }, []);
+  }, [isOnline]);
 
-  useEffect(() => { fetchClasses(); }, [fetchClasses]);
+  useEffect(() => {
+    if (!session) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    fetchClasses();
+  }, [session, fetchClasses]);
 
   async function addClass(input: { title: string; tutor: string; grade: string; subject: string; scheduled_at: string }) {
     const slug = input.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 28);

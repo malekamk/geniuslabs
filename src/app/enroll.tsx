@@ -26,6 +26,8 @@ import { Spacing } from '@/constants/theme';
 import { ALL_GRADES, subjectsForGrade } from '@/constants/curriculum';
 import { useAuth } from '@/context/auth-context';
 
+import CelebrationIllustration from '@/assets/illustrations/celebration.svg';
+
 const PRIMARY   = '#1565C0';
 const PRIMARY_D = '#0D47A1';
 const BG        = '#F8FAFC';
@@ -318,9 +320,7 @@ export default function EnrollScreen() {
   if (submitted) {
     return (
       <View style={s.successRoot}>
-        <LinearGradient colors={[PRIMARY, PRIMARY_D]} style={s.successIcon}>
-          <Ionicons name="checkmark" size={42} color="#fff" />
-        </LinearGradient>
+        <CelebrationIllustration width={180} height={180} />
         <ThemedText style={s.successTitle}>Application Submitted!</ThemedText>
         <ThemedText style={s.successSub}>
           We&apos;ll contact you at {profile?.phone ?? user?.email} within 24 hours to confirm classes and fees.
@@ -683,10 +683,6 @@ const s = StyleSheet.create({
     flex: 1, backgroundColor: BG,
     alignItems: 'center', justifyContent: 'center',
     padding: Spacing.five, gap: Spacing.three,
-  },
-  successIcon: {
-    width: 88, height: 88, borderRadius: 8,
-    alignItems: 'center', justifyContent: 'center',
   },
   successTitle: { fontSize: 22, fontWeight: '800', color: LABEL, textAlign: 'center' },
   successSub: { fontSize: 14, color: SUB, textAlign: 'center', lineHeight: 22 },

@@ -18,6 +18,8 @@ import { useAuth } from '@/context/auth-context';
 import { supabase } from '@/utils/supabase';
 import { log } from '@/utils/logger';
 
+import ProfileDataIllustration from '@/assets/illustrations/profile-data.svg';
+
 const PRIMARY = '#1565C0';
 const BG = '#F7F9F8';
 
@@ -71,6 +73,7 @@ export default function CompleteProfileScreen() {
         showsVerticalScrollIndicator={false}>
 
         <View style={styles.brand}>
+          <ProfileDataIllustration width={150} height={150} />
           <ThemedText style={styles.brandName}>Almost done</ThemedText>
           <ThemedText style={styles.brandSub}>A few details to finish setting up your account</ThemedText>
         </View>
